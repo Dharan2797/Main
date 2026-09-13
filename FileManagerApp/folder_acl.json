@@ -1,0 +1,9 @@
+{
+  "test_folder": {
+    "allowed_users": [],
+    "allowed_roles": [
+      "viewer"
+    ],
+    "updated_at": "2026-08-24T13:47:45"
+  }
+}

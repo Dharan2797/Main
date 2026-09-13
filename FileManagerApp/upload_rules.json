@@ -1,0 +1,25 @@
+{
+  "max_file_size_mb": null,
+  "max_folder_size_mb": null,
+  "blocked_extensions": [],
+  "blocked_mimetypes": [],
+  "folder_rules": {
+    "TestFolder": {
+      "max_file_size_mb": 1.0,
+      "max_folder_size_mb": null,
+      "blocked_extensions": [
+        "txt"
+      ],
+      "blocked_mimetypes": []
+    },
+    "test_folder": {
+      "max_file_size_mb": 2.0,
+      "max_folder_size_mb": null,
+      "blocked_extensions": [
+        "zip"
+      ],
+      "blocked_mimetypes": []
+    }
+  },
+  "session_timeout_minutes": 1
+}
