@@ -1,0 +1,4 @@
+[console_scripts]
+exe-thumbnailer = icoextract.scripts.thumbnailer:main [thumbnailer]
+icoextract = icoextract.scripts.extract:main
+icolist = icoextract.scripts.icolist:main
