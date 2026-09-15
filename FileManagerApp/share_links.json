@@ -1,0 +1,74 @@
+{
+  "GkJVwr3365ovur0abpWzvqHL4B0": {
+    "rel_path": "TestFolder",
+    "created_at": "2026-06-27T22:30:54",
+    "created_by": "admin",
+    "expires_at": null,
+    "permissions": "download"
+  },
+  "IGck2S7p6BZGz1hLBMXYS0nsi9o": {
+    "rel_path": "TestFolder",
+    "created_at": "2026-06-27T22:33:19",
+    "created_by": "admin",
+    "expires_at": null,
+    "permissions": "read"
+  },
+  "cL8gZQJDXV4iXIF8emOtqvmaErw": {
+    "type": "folder_upload",
+    "folder_path": "TestFolderWeb",
+    "note": "",
+    "created_at": "2026-07-04T15:10:49",
+    "created_by": "admin",
+    "expires_at": null,
+    "password_hash": null
+  },
+  "42f71Y-u7X8YwC1MyQO7Y4cJ7lw": {
+    "rel_path": "TestFolderWeb",
+    "created_at": "2026-07-27T21:45:19",
+    "created_by": "admin",
+    "expires_at": null,
+    "permissions": "full"
+  },
+  "K3VpSolR44DS1Q6Y5tl9tBnUVZE": {
+    "rel_path": ".versions",
+    "created_at": "2026-08-13T19:15:48",
+    "created_by": "admin",
+    "expires_at": null,
+    "permissions": "read"
+  },
+  "k1XjaqNIwJbSc8i8TsRMyLOeb7I": {
+    "rel_path": "test_folder",
+    "created_at": "2026-08-24T13:42:16",
+    "created_by": "admin",
+    "expires_at": null,
+    "permissions": "read"
+  },
+  "coy6l4LNqst6m5SKvXmuw-0IhW8": {
+    "rel_path": "test1",
+    "created_at": "2026-08-27T11:41:06",
+    "created_by": "admin",
+    "expires_at": null,
+    "permissions": "read"
+  },
+  "dHjPor00qIE0TIw6YUeEVkeTBFo": {
+    "rel_path": "GSTBLR003.pdf",
+    "created_at": "2026-08-27T11:41:43",
+    "created_by": "admin",
+    "expires_at": null,
+    "permissions": "read"
+  },
+  "PNs6VFDs2nmWFsIQ-wG6Ntccffs": {
+    "rel_path": "test1",
+    "created_at": "2026-08-27T11:43:26",
+    "created_by": "admin",
+    "expires_at": null,
+    "permissions": "read_download"
+  },
+  "NRl7JaKTQ0xDJQGXZkXfeyZFh_I": {
+    "rel_path": "test1",
+    "created_at": "2026-08-27T11:44:11",
+    "created_by": "admin",
+    "expires_at": null,
+    "permissions": "upload_read_download"
+  }
+}

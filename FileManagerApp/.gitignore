@@ -1,0 +1,16 @@
+.secret_key
+.trash_cleanup_ts
+activity.log
+folder_quotas.json
+folder_acl.json
+favorites.json
+internal_shares.json
+comments.json
+shares_vault.json
+upload_rules.json
+users.json
+uploads/
+venv/
+__pycache__/
+*.pyc
+*.tmp

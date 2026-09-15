@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Link Expired – FileVault{% endblock %}
+{% block body %}
+<div class="login-page">
+  <div class="login-card" style="text-align:center;">
+    <div class="login-logo"><div class="big-icon">⏰</div><h1>Link Expired</h1><p>This share link has expired and is no longer valid.</p></div>
+    <a href="{{ url_for('login') }}" class="btn btn-primary" style="width:100%;justify-content:center;padding:11px;margin-top:8px;">🏠 Go to FileVault</a>
+  </div>
+</div>
+{% endblock %}

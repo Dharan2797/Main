@@ -1,0 +1,356 @@
+{% extends "base.html" %}
+{% block title %}{{ folder_name }} – Shared Folder – FileVault{% endblock %}
+{% block body %}
+<div class="app-layout" style="display: flex; justify-content: center; align-items: flex-start; padding: 40px 20px; min-height: 100vh; background: var(--bg);">
+  <div style="width: 100%; max-width: 950px; background: var(--card-bg); border: 1px solid var(--border); border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); overflow: hidden; padding: 28px;">
+    
+    <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); padding-bottom: 20px; margin-bottom: 24px; gap: 20px; flex-wrap: wrap;">
+      <div style="display: flex; align-items: center; gap: 14px;">
+        <span style="font-size: 2.5rem;">📁</span>
+        <div>
+          <h1 style="font-size: 1.6rem; font-weight: 700; margin: 0; color: var(--fg);">{{ folder_name }}</h1>
+          <p style="font-size: 0.85rem; color: var(--muted); margin: 4px 0 0 0;">
+            {% if permissions == 'read' %}Read Only (View Only)
+            {% elif permissions == 'read_download' %}Read & Download
+            {% elif permissions == 'upload_read_download' %}Read, Download & Upload Shared Folder
+            {% elif permissions == 'full' %}Collaborative Full Access Shared Folder
+            {% else %}Shared Folder{% endif %}
+          </p>
+        </div>
+      </div>
+      <div style="display: flex; gap: 10px; align-items: center;">
+        {% if permissions == 'full' %}
+          <button class="btn btn-ghost" onclick="document.getElementById('shareFolderCreateModal').classList.remove('hidden')" style="display: inline-flex; align-items: center; gap: 6px;">
+            <span>📁</span> New Folder
+          </button>
+        {% endif %}
+        {% if permissions != 'read' %}
+          <a href="{{ url_for('share_folder_zip_download', token=token, path=subpath) }}" class="btn btn-primary" style="text-decoration: none; display: inline-flex; align-items: center; gap: 8px;">
+            <span>🗜</span> Download Folder ZIP
+          </a>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Flash messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}
+      <ul class="flash-list" style="margin-bottom: 20px; list-style: none; padding: 0;">
+        {% for cat, msg in messages %}
+        <li class="flash-msg {{ cat }}" style="background: rgba(248,81,73,0.1); border: 1px solid rgba(248,81,73,0.2); padding: 10px 14px; border-radius: 8px; font-size: 0.88rem; margin-bottom: 8px; color: var(--fg);">
+          {{ msg }}
+        </li>{% endfor %}
+      </ul>
+    {% endif %}{% endwith %}
+
+    <!-- Breadcrumb Navigation -->
+    <nav style="margin-bottom: 20px; font-size: 0.9rem; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; background: rgba(255,255,255,0.03); padding: 10px 14px; border-radius: 8px; border: 1px solid var(--border);">
+      <a href="{{ url_for('share_download', token=token) }}" style="color: var(--accent); text-decoration: none; font-weight: 500; display: inline-flex; align-items: center; gap: 4px;">🏠 Root</a>
+      {% if subpath %}
+        {% set parts = subpath.split('/') %}
+        {% for part in parts %}
+          <span style="color: var(--muted);">›</span>
+          {% set partial = parts[:loop.index]|join('/') %}
+          {% if loop.last %}
+            <span style="color: var(--fg); font-weight: 600;">{{ part }}</span>
+          {% else %}
+            <a href="{{ url_for('share_download', token=token, path=partial) }}" style="color: var(--accent); text-decoration: none; font-weight: 500;">{{ part }}</a>
+          {% endif %}
+        {% endfor %}
+      {% endif %}
+    </nav>
+
+    <!-- Collaborative Upload Section (if Upload/Download/Read or Full Access) -->
+    {% if permissions in ('upload_read_download', 'full') %}
+      <div style="background: rgba(255,255,255,0.02); border: 1px dashed var(--border); border-radius: 12px; padding: 20px; margin-bottom: 24px; text-align: center;">
+        <h3 style="font-size: 1rem; margin-bottom: 8px; font-weight: 600;">⬆️ Upload to this directory</h3>
+        <p style="font-size: 0.8rem; color: var(--muted); margin-bottom: 14px;">Select files to upload directly into this folder structure.</p>
+        
+        <input type="file" id="shareFileInput" multiple style="display: none;" onchange="handleShareUploads(false)" />
+        <input type="file" id="shareFolderInput" multiple webkitdirectory style="display: none;" onchange="handleShareUploads(true)" />
+        
+        <div style="display: flex; justify-content: center; gap: 10px; flex-wrap: wrap;">
+          <button class="btn btn-ghost" onclick="document.getElementById('shareFileInput').click()">📄 Choose Files</button>
+          <button class="btn btn-ghost" onclick="document.getElementById('shareFolderInput').click()">📁 Choose Folder</button>
+        </div>
+        
+        <div id="shareProgressWrap" style="display: none; margin-top: 14px;">
+          <div style="background: rgba(255,255,255,0.08); border-radius: 6px; height: 6px; overflow: hidden; width: 100%;">
+            <div id="shareProgressBar" style="height: 100%; background: var(--accent); width: 0%; transition: width 0.2s;"></div>
+          </div>
+          <span id="shareProgressText" style="font-size: 0.75rem; color: var(--muted); display: block; margin-top: 4px;">0%</span>
+        </div>
+      </div>
+    {% endif %}
+
+    <!-- Bulk action bar -->
+    <div id="bulkBar" style="display: none; align-items: center; gap: 10px; margin-bottom: 16px; padding: 12px; background: rgba(0,0,0,0.2); border-radius: 8px; border: 1px solid var(--border);">
+      <span id="bulkCount" style="font-weight: 600; font-size: 0.9rem;">0 selected</span>
+      {% if permissions != 'read' %}
+      <button class="btn btn-success btn-sm" onclick="bulkDownloadZip()">⬇ Download ZIP</button>
+      {% endif %}
+      <button class="btn btn-ghost btn-sm" onclick="clearSelection()">✕ Clear</button>
+    </div>
+
+    <!-- Hidden form for batch download -->
+    <form id="batchDownloadForm" action="{{ url_for('share_folder_batch_download', token=token) }}" method="post" style="display:none;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+      <input type="hidden" name="paths" id="batchPaths" />
+    </form>
+
+    <!-- Files Table -->
+    {% if files or subpath %}
+    <div style="overflow-x: auto;">
+      <table class="file-table" style="width: 100%; border-collapse: collapse; text-align: left;">
+        <thead>
+          <tr style="border-bottom: 1px solid var(--border);">
+            <th style="padding: 12px 16px; font-weight: 600; color: var(--muted); font-size: 0.85rem; width: 32px;"><input type="checkbox" id="selectAll" onchange="toggleSelectAll(this)" /></th>
+            <th style="padding: 12px 16px; font-weight: 600; color: var(--muted); font-size: 0.85rem;">Name</th>
+            <th style="padding: 12px 16px; font-weight: 600; color: var(--muted); font-size: 0.85rem;">Type</th>
+            <th style="padding: 12px 16px; font-weight: 600; color: var(--muted); font-size: 0.85rem;">Size</th>
+            <th style="padding: 12px 16px; font-weight: 600; color: var(--muted); font-size: 0.85rem; text-align: right;">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% if subpath %}
+            {% set parent_parts = subpath.split('/')[:-1] %}
+            {% set parent_path = parent_parts|join('/') %}
+            <tr style="border-bottom: 1px solid var(--border);">
+              <td colspan="5" style="padding: 14px 16px;">
+                <a href="{{ url_for('share_download', token=token, path=parent_path) if parent_path else url_for('share_download', token=token) }}" style="color: var(--accent); text-decoration: none; font-size: 0.88rem; font-weight: 600; display: inline-flex; align-items: center; gap: 6px;">
+                  <span>⬆</span> Up to parent folder
+                </a>
+              </td>
+            </tr>
+          {% endif %}
+
+          {% for f in files %}
+          <tr style="border-bottom: 1px solid var(--border); transition: background-color 0.2s;">
+            <td style="padding: 14px 16px;">
+              <input type="checkbox" class="row-check" data-path="{{ (subpath + '/' + f.name).strip('/') if subpath else f.name }}" data-type="{{ 'folder' if f.is_dir else 'file' }}" onchange="updateBulkBar()" />
+            </td>
+            <td style="padding: 14px 16px;">
+              <div style="display: flex; align-items: center; gap: 10px;">
+                <span style="font-size: 1.2rem;">
+                  {% if f.is_dir %}📁{% else %}{{ f.name|fileicon }}{% endif %}
+                </span>
+                {% if f.is_dir %}
+                  <a href="{{ url_for('share_download', token=token, path=f.subpath) }}" style="font-weight: 500; color: var(--accent); text-decoration: none; border-bottom: 1px dashed transparent; transition: all 0.2s;" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='transparent'">
+                    {{ f.name }}
+                  </a>
+                {% else %}
+                  {% set full_rel = (rel_path + '/' + f.subpath).strip('/') %}
+                  {% set dl_url = url_for('share_folder_file_download', token=token, subpath=f.subpath) %}
+                  {% set pv_url = url_for('share_folder_file_preview', token=token, subpath=f.subpath) %}
+                  <a href="#" style="font-weight: 500; color: var(--fg); text-decoration: none;" onclick="handleFileClick('{{ full_rel }}','{{ f.name }}','{{ dl_url }}','{{ pv_url }}');return false;">{{ f.name }}</a>
+                {% endif %}
+              </div>
+            </td>
+            <td style="padding: 14px 16px;">
+              <span class="type-badge" style="background: var(--border); color: var(--fg); padding: 4px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: 600;">
+                {% if f.is_dir %}Folder{% else %}{{ f.name.rsplit('.', 1)[-1].upper() if '.' in f.name else 'FILE' }}{% endif %}
+              </span>
+            </td>
+            <td style="padding: 14px 16px; color: var(--muted); font-size: 0.88rem;">
+              {% if f.is_dir %}—{% else %}{{ f.size|filesizeformat }}{% endif %}
+            </td>
+            <td style="padding: 14px 16px; text-align: right;">
+              <div style="display: inline-flex; gap: 6px; align-items: center; justify-content: flex-end;">
+                {% if not f.is_dir %}
+                  {% if permissions != 'read' %}
+                    <a href="{{ url_for('share_folder_file_download', token=token, subpath=f.subpath) }}" class="btn btn-success btn-sm" style="text-decoration: none; padding: 6px 12px; font-size: 0.8rem; display: inline-flex; align-items: center; gap: 4px;" title="Download">
+                      ⬇ Download
+                    </a>
+                  {% endif %}
+                {% else %}
+                  <a href="{{ url_for('share_download', token=token, path=f.subpath) }}" class="btn btn-primary btn-sm" style="text-decoration: none; padding: 6px 12px; font-size: 0.8rem; display: inline-flex; align-items: center; gap: 4px;" title="Open Folder">
+                    📂 Open
+                  </a>
+                {% endif %}
+                
+                {% if permissions == 'full' %}
+                  <button class="btn btn-ghost btn-sm" onclick="openShareRename('{{ f.subpath }}', '{{ f.name }}')" style="padding: 6px 8px; font-size: 0.8rem;" title="Rename">✏️</button>
+                  <button class="btn btn-ghost btn-sm" onclick="openShareMove('{{ f.subpath }}', '{{ f.name }}')" style="padding: 6px 8px; font-size: 0.8rem;" title="Move/Copy">✂️</button>
+                  <form action="{{ url_for('share_folder_delete', token=token, item_subpath=f.subpath) }}" method="post" onsubmit="return confirm('Delete this item?')" style="display: inline;">
+                    <button class="btn btn-danger btn-sm" style="padding: 6px 8px; font-size: 0.8rem;" title="Delete">🗑</button>
+                  </form>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty-state" style="padding: 60px 20px; text-align: center;">
+      <span class="empty-icon" style="font-size: 3rem; display: block; margin-bottom: 16px;">📭</span>
+      <p style="color: var(--muted); margin: 0;">This shared folder is empty.</p>
+    </div>
+    {% endif %}
+
+  </div>
+</div>
+
+<!-- ══ COLLABORATIVE CREATE FOLDER MODAL ═════════════════════════════════════ -->
+{% if permissions == 'full' %}
+<div class="modal-backdrop hidden" id="shareFolderCreateModal" style="z-index: 100;">
+  <div class="modal-box">
+    <button class="modal-close-btn" onclick="document.getElementById('shareFolderCreateModal').classList.add('hidden')">✕</button>
+    <h2>📁 Create New Folder</h2>
+    <form action="{{ url_for('share_folder_create_dir', token=token) }}" method="post">
+      <input type="hidden" name="subpath" value="{{ subpath or '' }}" />
+      <div class="form-group"><label>Folder Name</label>
+        <input class="form-input" type="text" name="folder_name" placeholder="e.g. SubFolder" required autofocus /></div>
+      <div style="display:flex;gap:10px;margin-top:16px;">
+        <button type="submit" class="btn btn-primary" style="flex:1;justify-content:center;">📁 Create</button>
+        <button type="button" class="btn btn-ghost" onclick="document.getElementById('shareFolderCreateModal').classList.add('hidden')" style="flex:1;justify-content:center;">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ══ COLLABORATIVE RENAME MODAL ═══════════════════════════════════════════ -->
+<div class="modal-backdrop hidden" id="shareRenameModal" style="z-index: 100;">
+  <div class="modal-box">
+    <button class="modal-close-btn" onclick="document.getElementById('shareRenameModal').classList.add('hidden')">✕</button>
+    <h2>✏️ Rename</h2>
+    <input type="hidden" id="shareRenamePath" />
+    <div class="form-group"><label>New Name</label>
+      <input id="shareRenameInput" class="form-input" type="text" placeholder="Enter new name" required autofocus /></div>
+    <div style="display:flex;gap:10px;margin-top:16px;">
+      <button class="btn btn-primary" style="flex:1;justify-content:center;" onclick="submitShareRename()">✏️ Rename</button>
+      <button class="btn btn-ghost" onclick="document.getElementById('shareRenameModal').classList.add('hidden')" style="flex:1;justify-content:center;">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ COLLABORATIVE MOVE / COPY MODAL ══════════════════════════════════════ -->
+<div class="modal-backdrop hidden" id="shareMoveModal" style="z-index: 100;">
+  <div class="modal-box">
+    <button class="modal-close-btn" onclick="document.getElementById('shareMoveModal').classList.add('hidden')">✕</button>
+    <h2>✂️ Move / Copy</h2>
+    <p style="font-size:0.83rem;color:var(--muted);margin-bottom:16px;">Item: <strong id="shareMoveItemName"></strong></p>
+    <input type="hidden" id="shareMoveSrcPath" />
+    <form action="{{ url_for('share_folder_move', token=token) }}" method="post" id="shareMoveForm">
+      <input type="hidden" name="src_path" id="shareMoveSrcInput" />
+      <input type="hidden" name="action" id="shareMoveActionInput" value="move" />
+      <div class="form-group"><label>Destination Folder (relative to shared root)</label>
+        <input class="form-input" type="text" name="dest_folder" placeholder="e.g. subfolder (blank = root)" /></div>
+      <div style="display:flex;gap:10px;margin-top:16px;">
+        <button type="button" class="btn btn-primary" style="flex:1;justify-content:center;" onclick="submitShareMove('move')">✂️ Move</button>
+        <button type="button" class="btn btn-ghost" style="flex:1;justify-content:center;" onclick="submitShareMove('copy')">📋 Copy</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+<script src="{{ url_for('static', filename='js/upload_manager.js') }}?v=1.0.1"></script>
+<script src="{{ url_for('static', filename='js/main.js') }}?v=1.0.4"></script>
+<script>
+{% if permissions in ('upload_read_download', 'full') %}
+function handleShareUploads(isFolder) {
+  const input = document.getElementById(isFolder ? 'shareFolderInput' : 'shareFileInput');
+  const files = Array.from(input.files);
+  if (!files.length) return;
+
+  const queue = new FileVaultUploadQueue({
+    uploadUrl: "{{ url_for('share_folder_upload', token=token) }}",
+    subpath: "{{ subpath or '' }}",
+    isShared: true,
+    onComplete: () => window.location.reload()
+  });
+  queue.addFiles(files);
+}
+{% endif %}
+
+{% if permissions == 'full' %}
+function openShareRename(path, name) {
+  document.getElementById('shareRenamePath').value = path;
+  document.getElementById('shareRenameInput').value = name;
+  document.getElementById('shareRenameModal').classList.remove('hidden');
+  document.getElementById('shareRenameInput').focus();
+}
+
+function submitShareRename() {
+  const path = document.getElementById('shareRenamePath').value;
+  const newName = document.getElementById('shareRenameInput').value.trim();
+  if (!newName) return;
+  
+  const fd = new FormData();
+  fd.append('old_path', path);
+  fd.append('new_name', newName);
+  
+  fetch("{{ url_for('share_folder_rename', token=token) }}", {
+    method: 'POST',
+    headers: { 'X-Requested-With': 'XMLHttpRequest' },
+    body: fd
+  }).then(r => r.json()).then(r => {
+    if (r.status === 'success') {
+      window.location.reload();
+    } else {
+      alert('Error: ' + r.msg);
+    }
+  });
+}
+
+function openShareMove(path, name) {
+  document.getElementById('shareMoveSrcPath').value = path;
+  document.getElementById('shareMoveItemName').textContent = name;
+  document.getElementById('shareMoveModal').classList.remove('hidden');
+}
+
+function submitShareMove(action) {
+  const path = document.getElementById('shareMoveSrcPath').value;
+  document.getElementById('shareMoveSrcInput').value = path;
+  document.getElementById('shareMoveActionInput').value = action;
+  document.getElementById('shareMoveForm').submit();
+}
+{% endif %}
+
+function handleFileClick(path, filename, downloadUrl, previewUrl) {
+  const ext = filename.split('.').pop().toLowerCase();
+  
+  // Browser previewable
+  const browserFriendly = [
+    'png','jpg','jpeg','gif','svg','webp','bmp',
+    'mp4','webm','mov','mp3','wav','ogg','flac',
+    'pdf','txt','md','csv','json','xml','py','js','html','css','log'
+  ];
+  
+  if (browserFriendly.includes(ext)) {
+    // Open in a new tab for native browser viewing
+    window.open(previewUrl, '_blank');
+  } else {
+    // Attempt local execution if accessed on the host machine
+    const fd = new FormData();
+    fd.append('filepath', path);
+    
+    const csrfMeta = document.querySelector('meta[name="csrf-token"]');
+    const csrfToken = csrfMeta ? csrfMeta.getAttribute('content') : '';
+
+    fetch('/api/open_local', {
+      method: 'POST',
+      headers: {
+        'X-CSRF-Token': csrfToken
+      },
+      body: fd
+    })
+    .then(r => r.json())
+    .then(res => {
+      if (res.status === 'success') {
+        console.log('Opened locally:', res.msg);
+      } else {
+        // Fallback: download the file
+        console.warn('Could not open file locally, downloading instead:', res.msg);
+        window.location.href = downloadUrl;
+      }
+    })
+    .catch(err => {
+      console.error('Error opening locally, downloading instead:', err);
+      window.location.href = downloadUrl;
+    });
+  }
+}
+</script>
+{% endblock %}

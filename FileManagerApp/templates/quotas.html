@@ -1,0 +1,277 @@
+{% extends "base.html" %}
+{% block title %}Storage Quotas – FileVault{% endblock %}
+{% block body %}
+
+<div class="app-layout">
+
+  <!-- ═══ SIDEBAR ═══════════════════════════════════════════════════════════ -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-icon">🗄️</div>
+      <span class="logo-text">File<span>Vault</span></span>
+    </div>
+    <nav class="sidebar-nav">
+      <a href="{{ url_for('index') }}" class="nav-item">
+        <span class="nav-icon">🏠</span><span class="nav-label">Home</span>
+      </a>
+      <a href="{{ url_for('favorites_page') }}" class="nav-item">
+        <span class="nav-icon">⭐</span><span class="nav-label">Favorites</span>
+      </a>
+      <a href="{{ url_for('shared_with_me_page') }}" class="nav-item">
+        <span class="nav-icon">👥</span><span class="nav-label">Shared with me</span>
+      </a>
+      <a href="{{ url_for('quotas_page') }}" class="nav-item active">
+        <span class="nav-icon">⚙️</span><span class="nav-label">Storage Quotas</span>
+      </a>
+      {% if current_user.is_admin %}
+      <a href="{{ url_for('admin_users') }}" class="nav-item"><span class="nav-icon">👥</span><span class="nav-label">Users</span></a>
+      <a href="{{ url_for('admin_acl') }}" class="nav-item"><span class="nav-icon">🔐</span><span class="nav-label">Folder Access</span></a>
+      <a href="{{ url_for('admin_rules') }}" class="nav-item"><span class="nav-icon">🛡️</span><span class="nav-label">Upload Rules</span></a>
+      {% endif %}
+    </nav>
+    <div class="sidebar-footer">
+      <div class="user-badge">
+        <div class="user-avatar">{{ current_user.id[0].upper() }}</div>
+        <div class="user-info">
+          <div class="name">{{ current_user.id }}</div>
+          <div class="role">{{ current_user.role|capitalize }}</div>
+        </div>
+        <a href="{{ url_for('logout') }}" class="logout-btn" title="Sign out">⏏</a>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ═══ MAIN ══════════════════════════════════════════════════════════════ -->
+  <div class="main-content">
+
+    <header class="topbar">
+      <h1>⚙️ Storage Quota Manager</h1>
+    </header>
+
+    <!-- Flash messages -->
+    <div style="padding:0 28px;">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          <ul class="flash-list" style="margin-top:14px;">
+            {% for category, msg in messages %}
+              <li class="flash-msg {{ category }}">
+                {% if category == 'success' %}✅{% elif category == 'error' %}❌{% else %}ℹ️{% endif %}
+                {{ msg }}
+              </li>
+            {% endfor %}
+          </ul>
+        {% endif %}
+      {% endwith %}
+    </div>
+
+    <div class="page-body">
+
+      <!-- Info banner -->
+      <div class="quota-info-banner">
+        <span class="banner-icon">💡</span>
+        <div>
+          <strong>How quotas work:</strong> Assign a storage limit to any folder.
+          Uploads are blocked when the folder reaches its limit.
+          You can extend or shrink the limit at any time — existing files are never deleted automatically.
+        </div>
+      </div>
+
+      <!-- ── Root folder row ──────────────────────────────────────────────── -->
+      <div class="quota-section-title">📂 Root Folder</div>
+      <div class="quota-card" id="quota-root">
+        {% set r = root_info %}
+        <div class="quota-card-header">
+          <div class="quota-folder-name">
+            <span>🏠</span>
+            <span>Root  <small style="color:var(--muted);font-size:0.75rem;">(all files at top level)</small></span>
+          </div>
+          <div class="quota-badges">
+            {% if r.has_quota %}
+              <span class="qbadge qbadge-set">Quota set</span>
+            {% else %}
+              <span class="qbadge qbadge-unlimited">Unlimited</span>
+            {% endif %}
+          </div>
+        </div>
+
+        {% if r.has_quota %}
+          {% set pct = r.pct %}
+          <div class="quota-bar-row">
+            <div class="quota-track">
+              <div class="quota-fill {% if pct >= 90 %}danger{% elif pct >= 70 %}warn{% endif %}"
+                   style="width:{{ pct }}%;"></div>
+            </div>
+            <span class="quota-pct">{{ pct }}%</span>
+          </div>
+          <div class="quota-meta">
+            <span>Used: <strong>{{ r.used | filesizeformat }}</strong></span>
+            <span>Limit: <strong>{{ r.quota_bytes | filesizeformat }}</strong></span>
+            <span>Free: <strong>{{ [r.quota_bytes - r.used, 0] | max | filesizeformat }}</strong></span>
+          </div>
+        {% else %}
+          <div class="quota-meta">
+            <span>Current usage: <strong>{{ r.used | filesizeformat }}</strong></span>
+          </div>
+        {% endif %}
+
+        <div class="quota-actions">
+          <!-- Set / edit quota -->
+          <button class="btn btn-primary btn-sm"
+                  onclick="openQuotaModal('root', '{{ r.quota_bytes if r.has_quota else '' }}', '{{ r.note }}')">
+            {% if r.has_quota %}✏️ Edit Quota{% else %}➕ Set Quota{% endif %}
+          </button>
+          {% if r.has_quota %}
+            <form class="inline-form" action="{{ url_for('quota_remove') }}" method="post">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+              <input type="hidden" name="folder_key" value="root" />
+              <button type="submit" class="btn btn-ghost btn-sm"
+                      onclick="return confirm('Remove quota from Root? It will become unlimited.')">
+                🔓 Remove Limit
+              </button>
+            </form>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- ── Sub-folder list ──────────────────────────────────────────────── -->
+      {% if all_folders %}
+        <div class="quota-section-title" style="margin-top:28px;">📁 Sub-Folders</div>
+        {% for f in all_folders %}
+          <div class="quota-card">
+            <div class="quota-card-header">
+              <div class="quota-folder-name">
+                <span>📁</span>
+                <a href="{{ url_for('index', folder=f.rel) }}" class="folder-link">{{ f.rel }}</a>
+              </div>
+              <div class="quota-badges">
+                {% if f.has_quota %}
+                  <span class="qbadge qbadge-set">Quota set</span>
+                {% else %}
+                  <span class="qbadge qbadge-unlimited">Unlimited</span>
+                {% endif %}
+              </div>
+            </div>
+
+            {% if f.has_quota %}
+              {% set pct = f.pct %}
+              <div class="quota-bar-row">
+                <div class="quota-track">
+                  <div class="quota-fill {% if pct >= 90 %}danger{% elif pct >= 70 %}warn{% endif %}"
+                       style="width:{{ pct }}%;"></div>
+                </div>
+                <span class="quota-pct">{{ pct }}%</span>
+              </div>
+              <div class="quota-meta">
+                <span>Used: <strong>{{ f.used | filesizeformat }}</strong></span>
+                <span>Limit: <strong>{{ f.quota_bytes | filesizeformat }}</strong></span>
+                <span>Free: <strong>{{ [f.quota_bytes - f.used, 0] | max | filesizeformat }}</strong></span>
+                {% if f.note %}<span>📝 {{ f.note }}</span>{% endif %}
+              </div>
+            {% else %}
+              <div class="quota-meta">
+                <span>Current usage: <strong>{{ f.used | filesizeformat }}</strong></span>
+              </div>
+            {% endif %}
+
+            <div class="quota-actions">
+              <button class="btn btn-primary btn-sm"
+                      onclick="openQuotaModal('{{ f.key }}', '{{ f.quota_bytes if f.has_quota else '' }}', '{{ f.note }}')">
+                {% if f.has_quota %}✏️ Edit Quota{% else %}➕ Set Quota{% endif %}
+              </button>
+              {% if f.has_quota %}
+                <form class="inline-form" action="{{ url_for('quota_remove') }}" method="post">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                  <input type="hidden" name="folder_key" value="{{ f.key }}" />
+                  <button type="submit" class="btn btn-ghost btn-sm"
+                          onclick="return confirm('Remove quota from {{ f.rel }}?')">
+                    🔓 Remove Limit
+                  </button>
+                </form>
+              {% endif %}
+            </div>
+          </div>
+        {% endfor %}
+      {% else %}
+        <div class="empty-state" style="margin-top:28px;">
+          <span class="empty-icon">📭</span>
+          <p>No sub-folders found. Create folders from the <a href="{{ url_for('index') }}" style="color:var(--accent-2);">Home</a> page first.</p>
+        </div>
+      {% endif %}
+
+    </div><!-- /page-body -->
+  </div><!-- /main-content -->
+</div><!-- /app-layout -->
+
+<!-- ═══ SET / EDIT QUOTA MODAL ════════════════════════════════════════════════ -->
+<div class="modal-backdrop hidden" id="quotaModal">
+  <div class="modal-box" style="max-width:440px;">
+    <button class="modal-close-btn" onclick="closeQuotaModal()">✕</button>
+    <h2>⚙️ Set Storage Quota</h2>
+    <p style="font-size:0.82rem;color:var(--muted);margin-bottom:18px;">
+      Folder: <strong id="modalFolderLabel" style="color:var(--accent-2);"></strong>
+    </p>
+    <form action="{{ url_for('quota_set') }}" method="post">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+      <input type="hidden" name="folder_key" id="modalFolderKey" />
+
+      <div class="form-group">
+        <label for="quotaValue">Storage Limit</label>
+        <div style="display:flex;gap:8px;">
+          <input id="quotaValue" class="form-input" type="number" name="quota_value"
+                 placeholder="e.g. 50" min="1" step="any" required
+                 style="flex:1;" />
+          <select name="quota_unit" class="form-input" style="width:90px;flex-shrink:0;">
+            <option value="MB">MB</option>
+            <option value="GB" selected>GB</option>
+            <option value="TB">TB</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="quotaNote">Note (optional)</label>
+        <input id="quotaNote" class="form-input" type="text" name="note"
+               placeholder="e.g. Media files storage" />
+      </div>
+
+      <div class="quota-hint" id="quotaHint"></div>
+
+      <div style="display:flex;gap:10px;margin-top:20px;">
+        <button type="submit" class="btn btn-primary" style="flex:1;justify-content:center;">
+          💾 Save Quota
+        </button>
+        <button type="button" class="btn btn-ghost" onclick="closeQuotaModal()"
+                style="flex:1;justify-content:center;">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+function openQuotaModal(key, currentBytes, note) {
+  document.getElementById('quotaModal').classList.remove('hidden');
+  document.getElementById('modalFolderKey').value   = key;
+  document.getElementById('modalFolderLabel').textContent = key === 'root' ? 'Root' : key;
+  document.getElementById('quotaNote').value         = note || '';
+
+  const val = document.getElementById('quotaValue');
+  const hint = document.getElementById('quotaHint');
+  if (currentBytes) {
+    const gb = (parseInt(currentBytes) / (1024**3)).toFixed(2);
+    val.value = gb;
+    hint.textContent = '⚠️ Current quota: ' + gb + ' GB. Change the value to extend or shrink.';
+    hint.style.display = 'block';
+  } else {
+    val.value = '';
+    hint.style.display = 'none';
+  }
+}
+function closeQuotaModal() {
+  document.getElementById('quotaModal').classList.add('hidden');
+}
+document.getElementById('quotaModal').addEventListener('click', (e) => {
+  if (e.target === document.getElementById('quotaModal')) closeQuotaModal();
+});
+</script>
+
+{% endblock %}

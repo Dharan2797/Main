@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Login – FileVault{% endblock %}
+{% block body %}
+<div class="login-page">
+  <div class="login-card">
+
+    <!-- Logo -->
+    <div class="login-logo">
+      <div class="big-icon">🗄️</div>
+      <h1>FileVault</h1>
+      <p>Sign in to manage your files</p>
+    </div>
+
+    <!-- Flash messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <ul class="flash-list">
+          {% for category, msg in messages %}
+            <li class="flash-msg {{ category }}">
+              {% if category == 'success' %}✅{% elif category == 'error' %}❌{% else %}ℹ️{% endif %}
+              {{ msg }}
+            </li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+    {% endwith %}
+
+    <!-- Login form -->
+    <form action="{{ url_for('login') }}" method="post">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+      <div class="form-group">
+        <label for="username">Username</label>
+        <input id="username" class="form-input" type="text" name="username"
+               placeholder="Enter username" required autocomplete="username" />
+      </div>
+      <div class="form-group">
+        <label for="password">Password</label>
+        <input id="password" class="form-input" type="password" name="password"
+               placeholder="Enter password" required autocomplete="current-password" />
+      </div>
+      <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;padding:11px;">
+        🔓 Sign In
+      </button>
+    </form>
+
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,361 @@
+{% extends "base.html" %}
+
+{% block title %}Utilization & Analytics | FileVault{% endblock %}
+
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+  .utilization-container {
+    padding: 2rem;
+    max-width: 1400px;
+    margin: 0 auto;
+    color: #e2e8f0;
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+
+  .utilization-header {
+    margin-bottom: 2rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    padding-bottom: 1rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .utilization-header h1 {
+    font-size: 2rem;
+    font-weight: 600;
+    background: linear-gradient(135deg, #60a5fa, #a78bfa);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin: 0;
+  }
+
+  .back-btn {
+    color: #60a5fa;
+    text-decoration: none;
+    font-weight: 600;
+    border: 1px solid #60a5fa;
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    transition: all 0.2s;
+  }
+  
+  .back-btn:hover {
+    background: rgba(96, 165, 250, 0.1);
+  }
+
+  /* Grid Layout for Charts */
+  .charts-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+    margin-bottom: 2rem;
+  }
+
+  @media (max-width: 1024px) {
+    .charts-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .chart-panel {
+    background: rgba(30, 41, 59, 0.7);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 16px;
+    padding: 1.5rem;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .chart-panel-wide {
+    grid-column: 1 / -1;
+  }
+
+  .panel-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin-bottom: 1.5rem;
+    color: #f8fafc;
+    width: 100%;
+    text-align: left;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .chart-container {
+    width: 100%;
+    position: relative;
+    display: flex;
+    justify-content: center;
+  }
+  
+  .doughnut-container {
+    height: 350px;
+  }
+  
+  .line-container {
+    height: 400px;
+  }
+
+  /* Stats Summary */
+  .stats-summary {
+    display: flex;
+    gap: 2rem;
+    margin-bottom: 2rem;
+    flex-wrap: wrap;
+  }
+  
+  .stat-pill {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 0.75rem 1.5rem;
+    border-radius: 9999px;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  
+  .stat-value {
+    font-weight: 700;
+    color: #f8fafc;
+    font-size: 1.2rem;
+  }
+</style>
+{% endblock %}
+
+{% block body %}
+<div class="utilization-container">
+  <div class="utilization-header">
+    <h1>Utilization & Analytics</h1>
+    <a href="{{ url_for('index') }}" class="back-btn">&larr; Back to Home</a>
+  </div>
+
+  <div class="stats-summary">
+    <div class="stat-pill">
+      <span>👥 Total Users:</span>
+      <span class="stat-value">{{ total_users }}</span>
+    </div>
+    <div class="stat-pill">
+      <span>📁 Total Folders:</span>
+      <span class="stat-value">{{ total_folders }}</span>
+    </div>
+    <div class="stat-pill">
+      <span>📄 Total Files:</span>
+      <span class="stat-value">{{ total_files }}</span>
+    </div>
+    <div class="stat-pill">
+      <span>💾 Used Space:</span>
+      <span class="stat-value">{{ (used_bytes / (1024*1024))|round(2) }} MB</span>
+    </div>
+  </div>
+
+  <div class="charts-grid">
+    <!-- Storage Breakdown Doughnut Chart -->
+    <div class="chart-panel">
+      <div class="panel-title">
+        <span>📊 Storage Breakdown</span>
+      </div>
+      <div class="chart-container doughnut-container">
+        <canvas id="breakdownChart"></canvas>
+      </div>
+    </div>
+
+    <!-- Utilization Gauge (Doughnut) -->
+    <div class="chart-panel">
+      <div class="panel-title">
+        <span>⚙️ Quota Utilization</span>
+        {% if limit_bytes > 0 %}
+          <span style="font-size:0.9rem; color:#94a3b8;">Limit: {{ (limit_bytes / (1024*1024))|round(2) }} MB</span>
+        {% else %}
+          <span style="font-size:0.9rem; color:#94a3b8;">No Limit Set</span>
+        {% endif %}
+      </div>
+      <div class="chart-container doughnut-container">
+        <canvas id="utilizationChart"></canvas>
+      </div>
+    </div>
+
+    <!-- Activity Trends Line Chart -->
+    <div class="chart-panel chart-panel-wide">
+      <div class="panel-title">
+        <span>📈 Activity Trends (Last 7 Days)</span>
+      </div>
+      <div class="chart-container line-container">
+        <canvas id="activityChart"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Common Chart.js Defaults for Dark Theme
+  Chart.defaults.color = '#94a3b8';
+  Chart.defaults.font.family = 'Inter, system-ui, sans-serif';
+  Chart.defaults.plugins.tooltip.backgroundColor = 'rgba(15, 23, 42, 0.9)';
+  Chart.defaults.plugins.tooltip.titleColor = '#f8fafc';
+  Chart.defaults.plugins.tooltip.bodyColor = '#e2e8f0';
+  Chart.defaults.plugins.tooltip.borderColor = 'rgba(255,255,255,0.1)';
+  Chart.defaults.plugins.tooltip.borderWidth = 1;
+
+  // 1. Storage Breakdown Chart
+  const breakdownCtx = document.getElementById('breakdownChart').getContext('2d');
+  const catData = [
+    {{ (categories['Images'] / (1024*1024))|round(2) }},
+    {{ (categories['Videos'] / (1024*1024))|round(2) }},
+    {{ (categories['Documents'] / (1024*1024))|round(2) }},
+    {{ (categories['Others'] / (1024*1024))|round(2) }}
+  ];
+  
+  new Chart(breakdownCtx, {
+    type: 'doughnut',
+    data: {
+      labels: ['Images', 'Videos', 'Documents', 'Others'],
+      datasets: [{
+        data: catData,
+        backgroundColor: [
+          '#34d399', // Emerald
+          '#f43f5e', // Rose
+          '#fbbf24', // Amber
+          '#60a5fa'  // Blue
+        ],
+        borderWidth: 0,
+        hoverOffset: 10
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      cutout: '70%',
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: { padding: 20, usePointStyle: true }
+        },
+        tooltip: {
+          callbacks: {
+            label: function(context) {
+              return ' ' + context.label + ': ' + context.raw + ' MB';
+            }
+          }
+        }
+      }
+    }
+  });
+
+  // 2. Quota Utilization Chart
+  const utilCtx = document.getElementById('utilizationChart').getContext('2d');
+  const usedMB = {{ (used_bytes / (1024*1024))|round(2) }};
+  const limitMB = {{ (limit_bytes / (1024*1024))|round(2) }};
+  const isUnlimited = limitMB === 0;
+  
+  let utilData, utilLabels, utilColors;
+  if (isUnlimited) {
+    utilLabels = ['Used Space'];
+    utilData = [usedMB];
+    utilColors = ['#8b5cf6'];
+  } else {
+    const freeMB = Math.max(0, limitMB - usedMB);
+    utilLabels = ['Used Space', 'Free Space'];
+    utilData = [usedMB, freeMB];
+    utilColors = ['#8b5cf6', 'rgba(255, 255, 255, 0.05)'];
+  }
+
+  new Chart(utilCtx, {
+    type: 'doughnut',
+    data: {
+      labels: utilLabels,
+      datasets: [{
+        data: utilData,
+        backgroundColor: utilColors,
+        borderWidth: 0,
+        circumference: 270,
+        rotation: 225
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      cutout: '80%',
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: { usePointStyle: true }
+        },
+        tooltip: {
+          callbacks: {
+            label: function(context) {
+              return ' ' + context.label + ': ' + context.raw + ' MB';
+            }
+          }
+        }
+      }
+    }
+  });
+
+  // 3. Activity Trends Line Chart
+  const activityCtx = document.getElementById('activityChart').getContext('2d');
+  
+  // Parse data passed from backend
+  const chartLabels = {{ chart_data['labels'] | tojson }};
+  const uploadData = {{ chart_data['uploads'] | tojson }};
+  const downloadData = {{ chart_data['downloads'] | tojson }};
+  
+  new Chart(activityCtx, {
+    type: 'line',
+    data: {
+      labels: chartLabels,
+      datasets: [
+        {
+          label: 'Uploads',
+          data: uploadData,
+          borderColor: '#34d399',
+          backgroundColor: 'rgba(52, 211, 153, 0.1)',
+          borderWidth: 3,
+          tension: 0.4,
+          fill: true,
+          pointBackgroundColor: '#34d399'
+        },
+        {
+          label: 'Downloads',
+          data: downloadData,
+          borderColor: '#60a5fa',
+          backgroundColor: 'rgba(96, 165, 250, 0.1)',
+          borderWidth: 3,
+          tension: 0.4,
+          fill: true,
+          pointBackgroundColor: '#60a5fa'
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: {
+        mode: 'index',
+        intersect: false,
+      },
+      plugins: {
+        legend: {
+          position: 'top',
+          labels: { usePointStyle: true, padding: 20 }
+        }
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          ticks: { stepSize: 1 },
+          grid: { color: 'rgba(255, 255, 255, 0.05)' }
+        },
+        x: {
+          grid: { display: false }
+        }
+      }
+    }
+  });
+</script>
+{% endblock %}

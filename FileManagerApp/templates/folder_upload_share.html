@@ -1,0 +1,299 @@
+{% extends "base.html" %}
+{% block title %}Upload to {{ folder_name }} – FileVault{% endblock %}
+{% block body %}
+<style>
+  :root {
+    --bg: #0d1117; --card: #161b22; --border: #30363d;
+    --accent: #58a6ff; --accent2: #3fb950; --danger: #f85149;
+    --text: #e6edf3; --muted: #8b949e; --radius: 12px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; }
+
+  .upload-page { width: 100%; max-width: 600px; }
+
+  .brand { display: flex; align-items: center; gap: 12px; justify-content: center; margin-bottom: 32px; }
+  .brand-icon { font-size: 2rem; }
+  .brand-name { font-size: 1.6rem; font-weight: 700; letter-spacing: -0.5px; }
+  .brand-name span { color: var(--accent); }
+
+  .upload-card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 32px; box-shadow: 0 8px 40px rgba(0,0,0,.45);
+  }
+
+  .folder-badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: rgba(88,166,255,.12); border: 1px solid rgba(88,166,255,.25);
+    color: var(--accent); border-radius: 8px; padding: 6px 14px;
+    font-size: 0.88rem; font-weight: 600; margin-bottom: 20px;
+  }
+
+  .upload-title { font-size: 1.35rem; font-weight: 700; margin-bottom: 6px; }
+  .upload-subtitle { font-size: 0.85rem; color: var(--muted); margin-bottom: 24px; line-height: 1.5; }
+
+  /* Note banner */
+  .note-banner {
+    background: rgba(63,185,80,.1); border: 1px solid rgba(63,185,80,.25);
+    border-radius: 8px; padding: 10px 14px; font-size: 0.83rem;
+    color: #3fb950; margin-bottom: 20px; display: flex; align-items: center; gap: 8px;
+  }
+
+  /* Password form */
+  .pw-form { display: flex; flex-direction: column; gap: 14px; }
+  .pw-form label { font-size: 0.85rem; color: var(--muted); margin-bottom: 4px; display: block; }
+  .form-input {
+    width: 100%; background: #0d1117; border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 14px; color: var(--text);
+    font-size: 0.9rem; transition: border-color .2s;
+  }
+  .form-input:focus { outline: none; border-color: var(--accent); }
+
+  /* Drop zone */
+  .drop-zone {
+    border: 2px dashed var(--border); border-radius: 10px;
+    padding: 40px 20px; text-align: center; cursor: pointer;
+    transition: all .25s; margin-bottom: 18px; position: relative;
+  }
+  .drop-zone.drag-over { border-color: var(--accent); background: rgba(88,166,255,.06); }
+  .drop-zone .drop-icon { font-size: 2.8rem; display: block; margin-bottom: 10px; }
+  .drop-zone .drop-label { font-size: 0.9rem; color: var(--muted); line-height: 1.6; }
+  .drop-zone .drop-label strong { color: var(--text); }
+  #fileInputHidden { display: none; }
+
+  /* Tabs */
+  .upload-tabs { display: flex; gap: 6px; margin-bottom: 18px; }
+  .upload-tab {
+    flex: 1; padding: 8px; border-radius: 7px; border: 1px solid var(--border);
+    background: transparent; color: var(--muted); font-size: 0.82rem;
+    font-weight: 600; cursor: pointer; transition: all .2s;
+  }
+  .upload-tab.active { background: var(--accent); border-color: var(--accent); color: #000; }
+
+  /* Progress list */
+  .progress-list { margin-top: 14px; display: flex; flex-direction: column; gap: 8px; max-height: 240px; overflow-y: auto; }
+  .progress-row {
+    display: flex; align-items: center; gap: 10px;
+    background: rgba(255,255,255,.04); border-radius: 7px; padding: 8px 12px; font-size: 0.8rem;
+  }
+  .progress-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .progress-status { font-size: 1rem; min-width: 24px; text-align: center; }
+
+  /* Overall progress bar */
+  .bar-wrap { margin-top: 16px; }
+  .bar-track { background: rgba(255,255,255,.08); border-radius: 6px; height: 6px; }
+  .bar-fill { height: 100%; border-radius: 6px; background: linear-gradient(90deg,var(--accent),var(--accent2)); width: 0%; transition: width .3s; }
+  .bar-text { font-size: 0.78rem; color: var(--muted); margin-top: 5px; }
+
+  /* Result banner */
+  .result-banner {
+    margin-top: 16px; border-radius: 8px; padding: 12px 16px;
+    font-size: 0.87rem; display: none;
+  }
+  .result-banner.success { background: rgba(63,185,80,.12); border: 1px solid rgba(63,185,80,.3); color: #3fb950; }
+  .result-banner.error   { background: rgba(248,81,73,.12); border: 1px solid rgba(248,81,73,.3);  color: var(--danger); }
+
+  /* Buttons */
+  .btn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px; border-radius: 8px; font-weight: 600; font-size: 0.88rem; cursor: pointer; border: none; transition: all .2s; }
+  .btn-primary { background: var(--accent); color: #000; width: 100%; justify-content: center; }
+  .btn-primary:hover { opacity: .88; }
+  .btn-ghost { background: rgba(255,255,255,.07); color: var(--text); border: 1px solid var(--border); }
+  .btn-ghost:hover { background: rgba(255,255,255,.12); }
+
+  .footer-note { text-align: center; margin-top: 24px; font-size: 0.75rem; color: var(--muted); }
+  .footer-note a { color: var(--accent); text-decoration: none; }
+</style>
+
+<div class="upload-page">
+  <div class="brand">
+    <div class="brand-icon">🗄️</div>
+    <div class="brand-name">File<span>Vault</span></div>
+  </div>
+
+  <div class="upload-card">
+    <div class="folder-badge">📁 {{ folder_name }}</div>
+
+    {% if pw_required and not pw_ok %}
+      <!-- ── Password gate ── -->
+      <div class="upload-title">🔒 Password Required</div>
+      <div class="upload-subtitle">This upload link is password-protected.</div>
+      {% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}
+        {% for cat, msg in messages %}
+        <div class="result-banner {{ cat }}" style="display:flex;">{{ msg }}</div>
+        {% endfor %}
+      {% endif %}{% endwith %}
+      <form class="pw-form" method="post">
+        <div>
+          <label>Enter Password</label>
+          <input class="form-input" type="password" name="password" autofocus required placeholder="Enter password…" />
+        </div>
+        <button type="submit" class="btn btn-primary">🔓 Unlock</button>
+      </form>
+
+    {% else %}
+      <!-- ── Upload UI ── -->
+      <div class="upload-title">📤 Upload Files</div>
+      <div class="upload-subtitle">Drop your files below — they'll land directly in <strong>{{ folder_name }}</strong>. No account needed.</div>
+
+      {% if note %}
+      <div class="note-banner">💬 {{ note }}</div>
+      {% endif %}
+
+      <div class="upload-tabs">
+        <button class="upload-tab active" id="tabFiles" onclick="switchTab('files')">📄 Files</button>
+        <button class="upload-tab" id="tabFolder" onclick="switchTab('folder')">📁 Folder</button>
+      </div>
+
+      <!-- Files panel -->
+      <div id="panelFiles">
+        <div class="drop-zone" id="dropZone">
+          <span class="drop-icon">☁️</span>
+          <div class="drop-label"><strong>Click to browse</strong> or drag &amp; drop files here<br><small style="color:var(--muted);">Multiple files supported — all types accepted</small></div>
+          <input type="file" id="fileInputHidden" multiple />
+        </div>
+        <button class="btn btn-primary" id="uploadFilesBtn" onclick="startUpload()">⬆️ Upload Files</button>
+      </div>
+
+      <!-- Folder panel -->
+      <div id="panelFolder" style="display:none;">
+        <div class="drop-zone" id="folderDropZone" onclick="document.getElementById('folderInputHidden').click()">
+          <span class="drop-icon">📁</span>
+          <div class="drop-label" id="folderDropLabel"><strong>Click to select a folder</strong><br><small style="color:var(--muted);">Entire folder structure is preserved</small></div>
+          <input type="file" id="folderInputHidden" webkitdirectory multiple style="display:none;" />
+        </div>
+        <button class="btn btn-primary" onclick="startFolderUpload()">⬆️ Upload Folder</button>
+      </div>
+
+      <!-- Progress -->
+      <div class="bar-wrap" id="barWrap" style="display:none;">
+        <div class="bar-track"><div class="bar-fill" id="barFill"></div></div>
+        <div class="bar-text" id="barText">Uploading…</div>
+      </div>
+      <div class="progress-list" id="progressList"></div>
+      <div class="result-banner" id="resultBanner"></div>
+    {% endif %}
+  </div>
+
+  <div class="footer-note">
+    Powered by <a href="{{ url_for('login') }}">FileVault</a> &nbsp;·&nbsp; Secure token-based upload
+  </div>
+</div>
+
+<script>
+const TOKEN = "{{ token }}";
+const UPLOAD_URL = "/share/upload/" + TOKEN;
+
+function switchTab(tab) {
+  document.getElementById('panelFiles').style.display  = tab === 'files'  ? '' : 'none';
+  document.getElementById('panelFolder').style.display = tab === 'folder' ? '' : 'none';
+  document.getElementById('tabFiles').classList.toggle('active', tab === 'files');
+  document.getElementById('tabFolder').classList.toggle('active', tab === 'folder');
+  clearProgress();
+}
+
+// ── Drag & drop ──────────────────────────────────────────────────────────────
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInputHidden');
+
+dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('dragover',  e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault(); dropZone.classList.remove('drag-over');
+  if (e.dataTransfer.files.length) {
+    fileInput.files = e.dataTransfer.files;
+    updateDropLabel(e.dataTransfer.files.length + ' file(s) selected');
+  }
+});
+fileInput.addEventListener('change', () => {
+  if (fileInput.files.length) updateDropLabel(fileInput.files.length + ' file(s) selected');
+});
+function updateDropLabel(msg) {
+  dropZone.querySelector('.drop-label').innerHTML = '<strong>' + msg + '</strong>';
+}
+
+// ── Folder input label ────────────────────────────────────────────────────────
+document.getElementById('folderInputHidden').addEventListener('change', function() {
+  if (this.files.length) {
+    const top = this.files[0].webkitRelativePath.split('/')[0];
+    document.getElementById('folderDropLabel').innerHTML = '<strong>📁 ' + top + '</strong><br><small>' + this.files.length + ' files ready</small>';
+  }
+});
+
+// ── Upload helpers ────────────────────────────────────────────────────────────
+function clearProgress() {
+  document.getElementById('progressList').innerHTML = '';
+  document.getElementById('barWrap').style.display = 'none';
+  document.getElementById('barFill').style.width = '0%';
+  document.getElementById('barText').textContent = '';
+  const rb = document.getElementById('resultBanner');
+  rb.style.display = 'none'; rb.className = 'result-banner';
+}
+
+function showResult(msg, ok) {
+  const rb = document.getElementById('resultBanner');
+  rb.textContent = (ok ? '✅ ' : '❌ ') + msg;
+  rb.className = 'result-banner ' + (ok ? 'success' : 'error');
+  rb.style.display = 'flex';
+}
+
+function uploadFiles(files, getRelPath) {
+  if (!files.length) { alert('Please select files first.'); return; }
+  clearProgress();
+  const list    = document.getElementById('progressList');
+  const barWrap = document.getElementById('barWrap');
+  const barFill = document.getElementById('barFill');
+  const barText = document.getElementById('barText');
+  barWrap.style.display = '';
+  let done = 0;
+
+  function next(i) {
+    if (i >= files.length) {
+      barFill.style.width = '100%';
+      barText.textContent = '100% — done!';
+      showResult('All ' + files.length + ' file(s) uploaded successfully!', true);
+      return;
+    }
+    const f   = files[i];
+    const rel = getRelPath(f);
+    const row = document.createElement('div');
+    row.className = 'progress-row';
+    row.innerHTML = '<span class="progress-name">' + rel + '</span><span class="progress-status">⏳</span>';
+    list.appendChild(row);
+    row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    const sp = row.querySelector('.progress-status');
+
+    const fd = new FormData();
+    fd.append('file', f, rel);
+    fd.append('rel_path', rel);
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', UPLOAD_URL);
+    xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+    xhr.onload = () => {
+      done++;
+      const pct = Math.round(done / files.length * 100);
+      barFill.style.width = pct + '%';
+      barText.textContent = pct + '% (' + done + ' / ' + files.length + ')';
+      try {
+        const r = JSON.parse(xhr.responseText);
+        sp.textContent = r.status === 'success' ? '✅' : '❌';
+      } catch { sp.textContent = xhr.status < 400 ? '✅' : '❌'; }
+      next(i + 1);
+    };
+    xhr.onerror = () => { done++; sp.textContent = '❌'; next(i + 1); };
+    xhr.send(fd);
+  }
+  next(0);
+}
+
+function startUpload() {
+  const files = Array.from(fileInput.files);
+  uploadFiles(files, f => f.name);
+}
+
+function startFolderUpload() {
+  const files = Array.from(document.getElementById('folderInputHidden').files);
+  uploadFiles(files, f => f.webkitRelativePath || f.name);
+}
+</script>
+{% endblock %}

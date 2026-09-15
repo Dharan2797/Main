@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+{% block title %}User Management – FileVault Admin{% endblock %}
+{% block body %}
+<div class="app-layout">
+  <aside class="sidebar">
+    <div class="sidebar-logo"><div class="logo-icon">🗄️</div><span class="logo-text">File<span>Vault</span></span></div>
+    <nav class="sidebar-nav">
+      <a href="{{ url_for('index') }}" class="nav-item"><span class="nav-icon">🏠</span><span class="nav-label">Home</span></a>
+      <a href="{{ url_for('favorites_page') }}" class="nav-item"><span class="nav-icon">⭐</span><span class="nav-label">Favorites</span></a>
+      <a href="{{ url_for('shared_with_me_page') }}" class="nav-item"><span class="nav-icon">👥</span><span class="nav-label">Shared with me</span></a>
+      <a href="{{ url_for('shares_page') }}" class="nav-item"><span class="nav-icon">🔗</span><span class="nav-label">Share Links</span></a>
+      <a href="{{ url_for('activity') }}" class="nav-item"><span class="nav-icon">📋</span><span class="nav-label">Activity Log</span></a>
+      <a href="{{ url_for('trash') }}" class="nav-item"><span class="nav-icon">🗑</span><span class="nav-label">Recycle Bin</span></a>
+      <a href="{{ url_for('quotas_page') }}" class="nav-item"><span class="nav-icon">⚙️</span><span class="nav-label">Storage Quotas</span></a>
+      <a href="{{ url_for('admin_users') }}" class="nav-item active"><span class="nav-icon">👥</span><span class="nav-label">Users</span></a>
+      <a href="{{ url_for('admin_acl') }}" class="nav-item"><span class="nav-icon">🔐</span><span class="nav-label">Folder Access</span></a>
+      <a href="{{ url_for('admin_rules') }}" class="nav-item"><span class="nav-icon">🛡️</span><span class="nav-label">Upload Rules</span></a>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="user-badge">
+        <div class="user-avatar">{{ current_user.id[0].upper() }}</div>
+        <div class="user-info"><div class="name">{{ current_user.id }}</div><div class="role">{{ current_user.role|capitalize }}</div></div>
+        <a href="{{ url_for('logout') }}" class="logout-btn" title="Sign out">⏏</a>
+      </div>
+    </div>
+  </aside>
+
+  <div class="main-content">
+    <header class="topbar"><h1>👥 User Management</h1></header>
+    <div class="page-body">
+      {% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}
+        <ul class="flash-list">{% for cat,msg in messages %}<li class="flash-msg {{ cat }}">{% if cat=='success' %}✅{% else %}❌{% endif %} {{ msg }}</li>{% endfor %}</ul>
+      {% endif %}{% endwith %}
+
+      <!-- Role legend -->
+      <div class="quota-info-banner" style="gap:18px;flex-wrap:wrap;">
+        <span class="banner-icon">👥</span>
+        <div style="flex:1;">
+          <strong>Roles:</strong>
+          <span class="qbadge qbadge-set" style="margin-left:8px;">Admin</span> Full access, manage users &amp; ACL &nbsp;·&nbsp;
+          <span class="qbadge" style="background:rgba(63,185,80,.15);color:#3fb950;border-color:rgba(63,185,80,.3);">Editor</span> Upload, rename, delete, move &nbsp;·&nbsp;
+          <span class="qbadge qbadge-unlimited">Viewer</span> Download &amp; preview only
+        </div>
+      </div>
+
+      <!-- Add user form -->
+      <div class="file-manager-card" style="margin-bottom:22px;">
+        <div class="card-header" style="padding:16px 20px 0;"><span class="card-title">➕ Add New User</span></div>
+        <form action="{{ url_for('admin_user_add') }}" method="post" style="padding:18px 20px;display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+          <div class="form-group" style="margin:0;flex:1;min-width:140px;">
+            <label style="font-size:0.78rem;color:var(--muted);display:block;margin-bottom:5px;">Username</label>
+            <input class="form-input" type="text" name="uid" placeholder="e.g. john" required />
+          </div>
+          <div class="form-group" style="margin:0;flex:1;min-width:140px;">
+            <label style="font-size:0.78rem;color:var(--muted);display:block;margin-bottom:5px;">Password</label>
+            <input class="form-input" type="password" name="password" required />
+          </div>
+          <div class="form-group" style="margin:0;">
+            <label style="font-size:0.78rem;color:var(--muted);display:block;margin-bottom:5px;">Role</label>
+            <select class="form-input" name="role" style="padding:8px 10px;">
+              <option value="viewer">Viewer</option>
+              <option value="editor">Editor</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
+          <button type="submit" class="btn btn-primary btn-sm" style="height:38px;">➕ Add User</button>
+        </form>
+      </div>
+
+      <!-- User list -->
+      <div class="file-manager-card">
+        <table class="file-table">
+          <thead><tr><th>Username</th><th>Role</th><th>Status</th><th>Created</th><th>Actions</th></tr></thead>
+          <tbody>
+          {% for u in users %}
+          <tr>
+            <td>
+              <div class="file-name-cell">
+                <div class="user-avatar" style="width:30px;height:30px;font-size:0.8rem;border-radius:8px;flex-shrink:0;">{{ u.uid[0].upper() }}</div>
+                <strong>{{ u.uid }}</strong>
+                {% if u.uid == current_user.id %}<span class="shared-badge">you</span>{% endif %}
+              </div>
+            </td>
+            <td>
+              <span class="qbadge {% if u.role=='admin' %}qbadge-set{% elif u.role=='editor' %}{% else %}qbadge-unlimited{% endif %}"
+                    style="{% if u.role=='editor' %}background:rgba(63,185,80,.15);color:#3fb950;border-color:rgba(63,185,80,.3);{% endif %}">
+                {{ u.role|capitalize }}
+              </span>
+            </td>
+            <td>
+              <span class="qbadge {% if u.active %}qbadge-set{% else %}qbadge-unlimited{% endif %}">
+                {{ 'Active' if u.active else 'Disabled' }}
+              </span>
+            </td>
+            <td class="date-cell" style="font-size:0.8rem;">{{ u.created_at[:10] if u.created_at else '—' }}</td>
+            <td>
+              <div class="action-row">
+                <button class="btn btn-ghost btn-sm" onclick="openEditModal('{{ u.uid }}','{{ u.role }}',{{ 'true' if u.active else 'false' }})">✏️ Edit</button>
+                {% if u.uid != current_user.id %}
+                <form class="inline-form" action="{{ url_for('admin_user_delete', uid=u.uid) }}" method="post"
+                      onsubmit="return confirm('Delete user {{ u.uid }}? This cannot be undone.')">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                  <button class="btn btn-danger btn-sm">🗑 Delete</button>
+                </form>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Edit user modal -->
+<div class="modal-backdrop hidden" id="editModal">
+  <div class="modal-box">
+    <button class="modal-close-btn" onclick="document.getElementById('editModal').classList.add('hidden')">✕</button>
+    <h2>✏️ Edit User</h2>
+    <form id="editForm" method="post">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+      <div class="form-group"><label>New Password (leave blank to keep current)</label>
+        <input class="form-input" type="password" name="password" placeholder="Leave blank = no change" /></div>
+      <div class="form-group"><label>Role</label>
+        <select class="form-input" name="role" id="editRole" style="padding:8px 10px;">
+          <option value="viewer">Viewer</option>
+          <option value="editor">Editor</option>
+          <option value="admin">Admin</option>
+        </select>
+      </div>
+      <div class="form-group"><label>Status</label>
+        <select class="form-input" name="active" style="padding:8px 10px;">
+          <option value="true">Active</option>
+          <option value="false">Disabled</option>
+        </select>
+      </div>
+      <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;margin-top:8px;">💾 Save Changes</button>
+    </form>
+  </div>
+</div>
+
+<script>
+function openEditModal(uid, role, active) {
+  document.getElementById('editForm').action = '/admin/users/edit/' + uid;
+  document.getElementById('editRole').value  = role;
+  document.querySelector('[name="active"]').value = active ? 'true' : 'false';
+  document.getElementById('editModal').classList.remove('hidden');
+}
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') document.getElementById('editModal').classList.add('hidden');
+});
+</script>
+{% endblock %}
