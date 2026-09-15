@@ -1,0 +1,15 @@
+# Core Web Framework
+Flask==2.3.3
+Werkzeug==2.3.8
+Flask-Login==0.6.3
+
+# Executable Icon Extraction & Image Processing
+icoextract
+pefile
+Pillow
+
+# Production WSGI Servers (uncomment based on OS)
+# gunicorn      # Linux production server
+# waitress      # Windows production server
+
+

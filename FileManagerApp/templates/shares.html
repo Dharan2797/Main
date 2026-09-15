@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}Share Links – FileVault{% endblock %}
+{% block body %}
+<div class="app-layout">
+  <aside class="sidebar">
+    <div class="sidebar-logo"><div class="logo-icon">🗄️</div><span class="logo-text">File<span>Vault</span></span></div>
+    <nav class="sidebar-nav">
+      <a href="{{ url_for('index') }}" class="nav-item"><span class="nav-icon">🏠</span><span class="nav-label">Home</span></a>
+      <a href="{{ url_for('favorites_page') }}" class="nav-item"><span class="nav-icon">⭐</span><span class="nav-label">Favorites</span></a>
+      <a href="{{ url_for('shared_with_me_page') }}" class="nav-item"><span class="nav-icon">👥</span><span class="nav-label">Shared with me</span></a>
+      <a href="{{ url_for('search') }}" class="nav-item"><span class="nav-icon">🔍</span><span class="nav-label">Search</span></a>
+      <a href="{{ url_for('shares_page') }}" class="nav-item active"><span class="nav-icon">🔗</span><span class="nav-label">Share Links</span></a>
+      <a href="{{ url_for('activity') }}" class="nav-item"><span class="nav-icon">📋</span><span class="nav-label">Activity Log</span></a>
+      <a href="{{ url_for('trash') }}" class="nav-item"><span class="nav-icon">🗑</span><span class="nav-label">Recycle Bin</span></a>
+      {% if current_user.is_admin %}
+      <a href="{{ url_for('admin_users') }}" class="nav-item"><span class="nav-icon">👥</span><span class="nav-label">Users</span></a>
+      <a href="{{ url_for('admin_acl') }}" class="nav-item"><span class="nav-icon">🔐</span><span class="nav-label">Folder Access</span></a>
+      <a href="{{ url_for('admin_rules') }}" class="nav-item"><span class="nav-icon">🛡️</span><span class="nav-label">Upload Rules</span></a>
+      {% endif %}
+    </nav>
+    <div class="sidebar-footer">
+      <div class="user-badge">
+        <div class="user-avatar">{{ current_user.id[0].upper() }}</div>
+        <div class="user-info"><div class="name">{{ current_user.id }}</div><div class="role">{{ current_user.role|capitalize }}</div></div>
+        <a href="{{ url_for('logout') }}" class="logout-btn">⏏</a>
+      </div>
+    </div>
+  </aside>
+  <div class="main-content">
+    <header class="topbar"><h1>🔗 Share Links</h1></header>
+    <div class="page-body">
+      {% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}
+        <ul class="flash-list">{% for cat,msg in messages %}<li class="flash-msg {{ cat }}">{% if cat=='success' %}✅{% else %}❌{% endif %} {{ msg }}</li>{% endfor %}</ul>
+      {% endif %}{% endwith %}
+
+      <div class="quota-info-banner">
+        <span class="banner-icon">🔗</span>
+        <div>Share links let <strong>anyone</strong> download a file without logging in. You can set an optional expiry time and password. Links can be revoked at any time from this page.</div>
+      </div>
+
+      {% if shares %}
+      <div class="file-manager-card">
+        <table class="file-table">
+          <thead><tr><th>File</th><th>Created</th><th>Expires</th><th>Permissions</th><th>Credentials</th><th>Status</th><th>Link</th><th>Actions</th></tr></thead>
+          <tbody>
+          {% for s in shares %}
+          <tr>
+            <td style="font-size:0.85rem;word-break:break-all;">{{ s.rel_path }}</td>
+            <td class="date-cell" style="white-space:nowrap;">{{ s.created_at }}</td>
+            <td class="date-cell">{{ s.expires_at or '—' }}</td>
+            <td>
+              <span class="type-badge" style="font-size: 0.75rem; text-transform: uppercase;">
+                {% if s.permissions == 'read' %}Read Only
+                {% elif s.permissions == 'read_download' %}Read & Download
+                {% elif s.permissions == 'download' %}Download Only
+                {% elif s.permissions == 'upload_read_download' %}Read/Write/Download
+                {% elif s.permissions == 'full' %}Full Access
+                {% else %}{{ s.permissions }}{% endif %}
+              </span>
+            </td>
+            <td style="font-size: 0.82rem; color: var(--muted);">
+              {% if s.shared_user or s.has_pw %}
+                👤 {{ s.shared_user or '—' }} <br> 🔑 {{ '🔒 Yes' if s.has_pw else 'Open' }}
+              {% else %}
+                —
+              {% endif %}
+            </td>
+            <td><span class="qbadge {% if s.expired %}qbadge-unlimited{% else %}qbadge-set{% endif %}">{% if s.expired %}Expired{% else %}Active{% endif %}</span></td>
+            <td>
+              <button class="btn btn-ghost btn-sm" onclick="copyLink('{{ s.link }}')" title="{{ s.link }}">📋 Copy</button>
+            </td>
+            <td>
+              <form class="inline-form" action="{{ url_for('share_revoke') }}" method="post"
+                    onsubmit="return confirm('Revoke this share link?')">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                <input type="hidden" name="token" value="{{ s.token }}" />
+                <button type="submit" class="btn btn-danger btn-sm">🚫 Revoke</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="empty-state"><span class="empty-icon">🔗</span><p>No share links yet. Open any file in the File Manager and click the 🔗 share button.</p></div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+<script>
+function copyLink(url) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(url)
+      .then(() => alert('Link copied to clipboard!'))
+      .catch(() => fallbackCopy(url));
+  } else {
+    fallbackCopy(url);
+  }
+}
+
+function fallbackCopy(url) {
+  const el = document.createElement('textarea');
+  el.value = url;
+  el.setAttribute('readonly', '');
+  el.style.position = 'absolute';
+  el.style.left = '-9999px';
+  document.body.appendChild(el);
+  el.select();
+  try {
+    document.execCommand('copy');
+    alert('Link copied to clipboard!');
+  } catch (err) {
+    prompt('Copy this link:', url);
+  }
+  document.body.removeChild(el);
+}
+</script>
+{% endblock %}

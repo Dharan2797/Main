@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}Search – FileVault{% endblock %}
+{% block body %}
+<div class="app-layout">
+  <aside class="sidebar">
+    <div class="sidebar-logo"><div class="logo-icon">🗄️</div><span class="logo-text">File<span>Vault</span></span></div>
+    <nav class="sidebar-nav">
+      <a href="{{ url_for('index') }}" class="nav-item"><span class="nav-icon">🏠</span><span class="nav-label">Home</span></a>
+      <a href="{{ url_for('favorites_page') }}" class="nav-item"><span class="nav-icon">⭐</span><span class="nav-label">Favorites</span></a>
+      <a href="{{ url_for('shared_with_me_page') }}" class="nav-item"><span class="nav-icon">👥</span><span class="nav-label">Shared with me</span></a>
+      <a href="{{ url_for('search') }}" class="nav-item active"><span class="nav-icon">🔍</span><span class="nav-label">Search</span></a>
+      <a href="{{ url_for('shares_page') }}" class="nav-item"><span class="nav-icon">🔗</span><span class="nav-label">Share Links</span></a>
+      <a href="{{ url_for('activity') }}" class="nav-item"><span class="nav-icon">📋</span><span class="nav-label">Activity Log</span></a>
+      <a href="{{ url_for('trash') }}" class="nav-item"><span class="nav-icon">🗑</span><span class="nav-label">Recycle Bin</span></a>
+      <a href="{{ url_for('quotas_page') }}" class="nav-item"><span class="nav-icon">⚙️</span><span class="nav-label">Storage Quotas</span></a>
+      {% if current_user.is_admin %}
+      <a href="{{ url_for('admin_users') }}" class="nav-item"><span class="nav-icon">👥</span><span class="nav-label">Users</span></a>
+      <a href="{{ url_for('admin_acl') }}" class="nav-item"><span class="nav-icon">🔐</span><span class="nav-label">Folder Access</span></a>
+      <a href="{{ url_for('admin_rules') }}" class="nav-item"><span class="nav-icon">🛡️</span><span class="nav-label">Upload Rules</span></a>
+      {% endif %}
+    </nav>
+    <div class="sidebar-footer">
+      <div class="user-badge">
+        <div class="user-avatar">{{ current_user.id[0].upper() }}</div>
+        <div class="user-info"><div class="name">{{ current_user.id }}</div><div class="role">{{ current_user.role|capitalize }}</div></div>
+        <a href="{{ url_for('logout') }}" class="logout-btn">⏏</a>
+      </div>
+    </div>
+  </aside>
+  <div class="main-content">
+    <header class="topbar"><h1>🔍 Global Search</h1></header>
+    <div class="page-body">
+      <form action="{{ url_for('search') }}" method="get" class="global-search-form">
+        <input class="form-input" type="text" name="q" value="{{ query }}" placeholder="Search files and folders…" autofocus style="font-size:1rem;padding:14px 18px;" />
+        <button type="submit" class="btn btn-primary" style="padding:14px 24px;font-size:1rem;">🔍 Search</button>
+      </form>
+
+      {% if query %}
+        <div style="margin:16px 0;font-size:0.88rem;color:var(--muted);">
+          {% if results %}{{ results|length }} result(s) for <strong style="color:var(--text);">"{{ query }}"</strong>
+          {% else %}No results found for <strong style="color:var(--text);">"{{ query }}"</strong>{% endif %}
+        </div>
+      {% endif %}
+
+      {% if results %}
+      <div class="file-manager-card">
+        <table class="file-table">
+          <thead><tr><th>Name</th><th>Type</th><th>Size</th><th>Modified</th><th>Location</th><th>Actions</th></tr></thead>
+          <tbody>
+          {% for r in results %}
+          <tr>
+            <td>
+              <div class="file-name-cell">
+                <span class="file-icon">
+                  {% if not r.is_dir and r.name|is_app_file %}
+                    <span class="app-icon-container" style="display: inline-flex; align-items: center;">
+                      <img src="{{ url_for('get_app_icon', filename=r.rel) }}" alt="APP" style="width:1.2em; height:1.2em; vertical-align:middle; border-radius:4px;" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline-block';" />
+                      <span style="display:none;">{{ r.name|fileicon }}</span>
+                    </span>
+                  {% elif r.is_dir %}📁{% else %}{{ r.name|fileicon }}{% endif %}
+                </span>
+                {% if r.is_dir %}
+                  <a class="folder-link" href="{{ url_for('index', folder=r.rel) }}">{{ r.name }}</a>
+                {% else %}
+                  <span class="file-name-text">{{ r.name }}</span>
+                {% endif %}
+              </div>
+            </td>
+            <td><span class="type-badge {% if r.is_dir %}folder-badge{% endif %}">{% if r.is_dir %}Folder{% else %}{{ r.name.rsplit('.',1)[-1].upper() if '.' in r.name else 'FILE' }}{% endif %}</span></td>
+            <td class="size-cell">{% if not r.is_dir %}{{ r.size|filesizeformat }}{% else %}—{% endif %}</td>
+            <td class="date-cell">{{ r.mtime|datetimeformat }}</td>
+            <td style="font-size:0.8rem;color:var(--muted);">
+              <a href="{{ url_for('index', folder=r.folder) }}" style="color:var(--accent-2);text-decoration:none;">{{ r.folder or 'Root' }}</a>
+            </td>
+            <td>
+              <div class="action-row">
+                {% if not r.is_dir %}
+                  <a class="btn btn-success btn-sm" href="{{ url_for('download', filename=r.rel) }}">⬇ Download</a>
+                {% else %}
+                  <a class="btn btn-ghost btn-sm" href="{{ url_for('index', folder=r.rel) }}">📂 Open</a>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% elif query %}
+      <div class="empty-state"><span class="empty-icon">🔍</span><p>No files or folders match "{{ query }}".</p></div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description"
+    content="FileVault – Secure file manager with folder support, upload progress and drag-and-drop." />
+  <meta name="csrf-token" content="{{ csrf_token() }}" />
+  <title>{% block title %}FileVault{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+</head>
+
+<body style="display: flex; flex-direction: column; min-height: 100vh; overflow-x: hidden;">
+  <!-- Animated Clouds Background -->
+  <div class="clouds-bg">
+    <div class="cloud-sym" style="top: 8%; --speed: 70s; --delay: 0s; --scale: 1.2;">☁️</div>
+    <div class="cloud-sym" style="top: 25%; --speed: 95s; --delay: -25s; --scale: 0.8;">☁️</div>
+    <div class="cloud-sym" style="top: 15%; --speed: 120s; --delay: -60s; --scale: 0.6;">☁️</div>
+    <div class="cloud-sym" style="top: 55%; --speed: 85s; --delay: -15s; --scale: 1.0;">☁️</div>
+    <div class="cloud-sym" style="top: 70%; --speed: 140s; --delay: -40s; --scale: 0.7;">☁️</div>
+  </div>
+
+  <div style="flex: 1; display: flex; flex-direction: column; position: relative; z-index: 1;">
+    {% block body %}{% endblock %}
+  </div>
+
+  <footer class="app-footer">
+    <span>@JMR INFOTECH</span>
+  </footer>
+
+  <!-- CSRF & 5-minute Idle Inactivity Auto-Logout -->
+  <script>
+    (function () {
+      const _meta = document.querySelector('meta[name="csrf-token"]');
+      if (!_meta) return;
+      const _csrfToken = _meta.getAttribute('content');
+      const _origFetch = window.fetch;
+      const _MUTATING = new Set(['POST', 'PUT', 'DELETE', 'PATCH']);
+      window.fetch = function (url, opts) {
+        opts = opts || {};
+        if (_MUTATING.has((opts.method || 'GET').toUpperCase())) {
+          if (opts.headers instanceof Headers) {
+            if (!opts.headers.has('X-CSRF-Token')) opts.headers.set('X-CSRF-Token', _csrfToken);
+          } else {
+            opts.headers = Object.assign({ 'X-CSRF-Token': _csrfToken }, opts.headers || {});
+          }
+        }
+        return _origFetch.call(this, url, opts);
+      };
+    })();
+
+    (function () {
+      // ── Dynamic Idle Auto-Logout (admin-configurable) ──────────────────────────
+      // The timeout value is fetched from /api/session-ping on page load so the
+      // admin can change it from the Upload Rules admin panel without touching code.
+      // On every user activity, we also ping the server (throttled to max once per
+      // 60 s) to refresh the Flask session cookie — this prevents the server from
+      // expiring the session while the user is actively uploading/downloading.
+
+      let IDLE_LIMIT_MS = 5 * 60 * 1000;  // fallback; overwritten after first ping
+      let idleTimer     = null;
+      let lastPingTime  = 0;
+      const PING_THROTTLE_MS = 60 * 1000; // ping server at most once per minute
+
+      // ── Fetch configured timeout from server & kick off idle timer ──────────
+      function initIdleTimer() {
+        fetch('/api/session-ping', { method: 'GET' })
+          .then(function (r) { return r.ok ? r.json() : null; })
+          .then(function (data) {
+            if (data && data.timeout_minutes && data.timeout_minutes > 0) {
+              IDLE_LIMIT_MS = data.timeout_minutes * 60 * 1000;
+            }
+            lastPingTime = Date.now();
+            resetIdleTimer();
+          })
+          .catch(function () {
+            // If the ping fails (e.g. network glitch) just start with the fallback
+            resetIdleTimer();
+          });
+      }
+
+      // ── Detect whether a file operation is in progress ──────────────────────
+      function isProcessingActive() {
+        // 1. Check active background uploads managed by UploadManager
+        if (window.UploadManager && typeof window.UploadManager.hasActiveUploads === 'function') {
+          if (window.UploadManager.hasActiveUploads()) return true;
+        }
+        // 2. Check traditional visible progress bar or active uploading elements
+        const progressTrack = document.getElementById('progressBar');
+        if (progressTrack && progressTrack.style.width && parseFloat(progressTrack.style.width) > 0 && parseFloat(progressTrack.style.width) < 100) {
+          return true;
+        }
+        // 3. Check active folder progress list item statuses
+        const activeUploadRow = document.querySelector('.ump-file-row:not(.ump-status-complete):not(.ump-status-error):not(.ump-status-canceled)');
+        if (activeUploadRow) return true;
+
+        return false;
+      }
+
+      // ── Reset the idle countdown timer ──────────────────────────────────────
+      function resetIdleTimer() {
+        if (idleTimer) clearTimeout(idleTimer);
+
+        idleTimer = setTimeout(function () {
+          // If an upload/download is still going, postpone logout until it finishes
+          if (isProcessingActive()) {
+            resetIdleTimer();
+            return;
+          }
+          // Truly idle — redirect to logout
+          window.location.href = "{{ url_for('logout') }}";
+        }, IDLE_LIMIT_MS);
+      }
+
+      // ── Throttled server ping to keep session cookie alive ──────────────────
+      function pingServer() {
+        const now = Date.now();
+        if (now - lastPingTime >= PING_THROTTLE_MS) {
+          lastPingTime = now;
+          fetch('/api/session-ping', { method: 'GET' })
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (data) {
+              // If admin changed the timeout, pick up the new value live
+              if (data && data.timeout_minutes && data.timeout_minutes > 0) {
+                IDLE_LIMIT_MS = data.timeout_minutes * 60 * 1000;
+              }
+            })
+            .catch(function () { /* silent – best effort */ });
+        }
+      }
+
+      // ── Wire up user-activity events ─────────────────────────────────────────
+      const userActivityEvents = ['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart', 'click'];
+      userActivityEvents.forEach(function (eventName) {
+        window.addEventListener(eventName, function () {
+          pingServer();      // keep server session alive
+          resetIdleTimer();  // reset the client-side countdown
+        }, { passive: true });
+      });
+
+      // ── Start ────────────────────────────────────────────────────────────────
+      initIdleTimer();
+    })();
+
+  </script>
+</body>
+
+</html>

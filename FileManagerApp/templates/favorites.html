@@ -1,0 +1,409 @@
+{% extends "base.html" %}
+{% block title %}Favorites – FileVault{% endblock %}
+{% block body %}
+<div class="app-layout">
+  <aside class="sidebar">
+    <div class="sidebar-logo"><div class="logo-icon">🗄️</div><span class="logo-text">File<span>Vault</span></span></div>
+    <nav class="sidebar-nav">
+      <a href="{{ url_for('index') }}" class="nav-item"><span class="nav-icon">🏠</span><span class="nav-label">Home</span></a>
+      <a href="{{ url_for('favorites_page') }}" class="nav-item active"><span class="nav-icon">⭐</span><span class="nav-label">Favorites</span></a>
+      <a href="{{ url_for('shared_with_me_page') }}" class="nav-item"><span class="nav-icon">👥</span><span class="nav-label">Shared with me</span></a>
+      <a href="{{ url_for('search') }}" class="nav-item"><span class="nav-icon">🔍</span><span class="nav-label">Search</span></a>
+      <a href="{{ url_for('shares_page') }}" class="nav-item"><span class="nav-icon">🔗</span><span class="nav-label">Share Links</span></a>
+      <a href="{{ url_for('activity') }}" class="nav-item"><span class="nav-icon">📋</span><span class="nav-label">Activity Log</span></a>
+      <a href="{{ url_for('trash') }}" class="nav-item"><span class="nav-icon">🗑</span><span class="nav-label">Recycle Bin</span></a>
+      <a href="{{ url_for('quotas_page') }}" class="nav-item"><span class="nav-icon">⚙️</span><span class="nav-label">Storage Quotas</span></a>
+      {% if current_user.is_admin %}
+      <a href="{{ url_for('admin_users') }}" class="nav-item">
+        <span class="nav-icon">👥</span><span class="nav-label">Users</span>
+      </a>
+      <a href="{{ url_for('admin_acl') }}" class="nav-item">
+        <span class="nav-icon">🔐</span><span class="nav-label">Folder Access</span>
+      </a>
+      <a href="{{ url_for('admin_rules') }}" class="nav-item">
+        <span class="nav-icon">🛡️</span><span class="nav-label">Upload Rules</span>
+      </a>
+      {% endif %}
+    </nav>
+    <div class="sidebar-footer">
+      <div class="user-badge">
+        <div class="user-avatar">{{ current_user.id[0].upper() }}</div>
+        <div class="user-info"><div class="name">{{ current_user.id }}</div><div class="role">{{ current_user.role|capitalize }}</div></div>
+        <a href="{{ url_for('logout') }}" class="logout-btn">⏏</a>
+      </div>
+    </div>
+  </aside>
+  <div class="main-content">
+    <header class="topbar">
+      <h1>⭐ Favorites</h1>
+    </header>
+    <div class="page-body">
+      {% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}
+        <ul class="flash-list">{% for cat,msg in messages %}<li class="flash-msg {{ cat }}">{% if cat=='success' %}✅{% else %}❌{% endif %} {{ msg }}</li>{% endfor %}</ul>
+      {% endif %}{% endwith %}
+
+      {% if items %}
+      <div class="file-manager-card">
+        <table class="file-table">
+          <thead>
+            <tr>
+              <th>Name</th><th>Type</th><th>Size</th><th>Last Modified</th><th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+          {% for item in items %}
+          <tr class="{% if item.is_dir %}folder-row{% else %}file-row{% endif %}" data-name="{{ item.name }}" data-size="{{ item.size }}" data-date="{{ item.mtime }}">
+            <td>
+              <div class="file-name-cell">
+                <span class="file-icon">
+                  {% if not item.is_dir and item.name|is_app_file %}
+                    <span class="app-icon-container" style="display: inline-flex; align-items: center;">
+                      <img src="{{ url_for('get_app_icon', filename=item.rel_path) }}" alt="APP" style="width:1.2em; height:1.2em; vertical-align:middle; border-radius:4px;" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline-block';" />
+                      <span style="display:none;">{{ item.name|fileicon }}</span>
+                    </span>
+                  {% elif item.is_dir %}📁{% else %}{{ item.name|fileicon }}{% endif %}
+                </span>
+                {% if item.is_dir %}
+                  <a class="folder-link" href="{{ url_for('index', folder=item.rel_path) }}">{{ item.name }}</a>
+                {% else %}
+                  {% if item.name|previewable %}
+                    <a href="#" class="file-name-text preview-link" onclick="openPreview('{{ url_for('preview', filename=item.rel_path) }}','{{ item.name }}');return false;">{{ item.name }}</a>
+                  {% else %}
+                    <span class="file-name-text">{{ item.name }}</span>
+                  {% endif %}
+                {% endif %}
+                <button class="star-btn starred" onclick="toggleStar('{{ item.rel_path }}', this)" title="Favorite">★</button>
+              </div>
+            </td>
+            <td><span class="type-badge {% if item.is_dir %}folder-badge{% endif %}">{% if item.is_dir %}Folder{% else %}{{ item.name.rsplit('.',1)[-1].upper() if '.' in item.name else 'FILE' }}{% endif %}</span></td>
+            <td class="size-cell">{% if item.is_dir %}—{% else %}{{ item.size|filesizeformat }}{% endif %}</td>
+            <td class="date-cell">{{ item.mtime|datetimeformat }}</td>
+            <td>
+              <div class="action-row">
+                <button class="btn btn-ghost btn-sm" onclick="openDetails('{{ item.rel_path }}')" title="Info">ℹ️</button>
+                {% if not item.is_dir %}
+                  {% if item.name|previewable %}
+                    <button class="btn btn-ghost btn-sm" onclick="openPreview('{{ url_for('preview', filename=item.rel_path) }}','{{ item.name }}')" title="Preview">👁</button>
+                  {% endif %}
+                  <a class="btn btn-success btn-sm" href="{{ url_for('download', filename=item.rel_path) }}" title="Download">⬇</a>
+                {% else %}
+                  <a href="{{ url_for('download_zip', folder_path=item.rel_path) }}" class="btn btn-ghost btn-sm" title="Download as ZIP">🗜</a>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="empty-state">
+        <span class="empty-icon">⭐</span>
+        <p>No favorited files or folders. Star items in Home to find them here easily.</p>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- Details Drawer and Preview Modals are shared -->
+<div class="details-drawer hidden" id="detailsDrawer">
+  <div class="drawer-header">
+    <h3>ℹ️ <span id="drawerItemName">Item Details</span></h3>
+    <button class="drawer-close" onclick="closeDetails()">✕</button>
+  </div>
+  <div class="drawer-tabs">
+    <button class="drawer-tab active" id="tabDetails" onclick="switchDrawerTab('details')">Details</button>
+    <button class="drawer-tab" id="tabComments" onclick="switchDrawerTab('comments')">Comments</button>
+    <button class="drawer-tab" id="tabSharing" onclick="switchDrawerTab('sharing')">Sharing</button>
+    <button class="drawer-tab" id="tabActivity" onclick="switchDrawerTab('activity')">Activity</button>
+  </div>
+  <div class="drawer-body">
+    <div class="drawer-pane active" id="paneDetails">
+      <div class="meta-list">
+        <div class="meta-item"><span class="meta-label">Name</span><span class="meta-value" id="metaName">-</span></div>
+        <div class="meta-item"><span class="meta-label">Path</span><span class="meta-value" id="metaPath">-</span></div>
+        <div class="meta-item"><span class="meta-label">Type</span><span class="meta-value" id="metaType">-</span></div>
+        <div class="meta-item"><span class="meta-label">Size</span><span class="meta-value" id="metaSize">-</span></div>
+        <div class="meta-item"><span class="meta-label">Last Modified</span><span class="meta-value" id="metaMtime">-</span></div>
+      </div>
+    </div>
+    <div class="drawer-pane" id="paneComments">
+      <div class="comments-list" id="drawerCommentsList"></div>
+      <div class="comment-form">
+        <textarea class="form-input comment-textarea" id="commentInput" placeholder="Add a comment..."></textarea>
+        <button class="btn btn-primary btn-sm" onclick="submitComment()">Comment</button>
+      </div>
+    </div>
+    <div class="drawer-pane" id="paneSharing">
+      <div class="shares-list" id="drawerSharesList"></div>
+      <div class="comment-form" id="sharingFormContainer">
+        <div class="form-group">
+          <label>Share with User</label>
+          <input type="text" class="form-input" id="shareUserInput" placeholder="Enter username..." />
+        </div>
+        <div class="form-group">
+          <label>Permission</label>
+          <select class="form-input" id="sharePermInput">
+            <option value="viewer">Viewer (Read Only)</option>
+            <option value="editor">Editor (Read/Write)</option>
+          </select>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="submitInternalShare()">Share</button>
+      </div>
+    </div>
+    <div class="drawer-pane" id="paneActivity">
+      <div class="drawer-activity" id="drawerActivityList"></div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop hidden" id="previewModal" onclick="if(event.target===this)closePreview()">
+  <div class="preview-box">
+    <div class="preview-header">
+      <span id="previewTitle"></span>
+      <div style="display:flex;gap:8px;">
+        <a id="previewDownload" href="#" class="btn btn-success btn-sm">⬇ Download</a>
+        <button class="modal-close-btn" onclick="closePreview()" style="position:static;font-size:20px;">✕</button>
+      </div>
+    </div>
+    <div class="preview-body" id="previewBody"></div>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
+<script>
+  // Favorites toggle
+  function toggleStar(path, btn) {
+    const fd = new FormData();
+    fd.append('path', path);
+    fetch('/favorite/toggle', { method: 'POST', body: fd })
+      .then(r => r.json())
+      .then(r => {
+        if (r.status === 'success') {
+          btn.classList.toggle('starred', r.starred);
+          // Auto remove row if unstarred on the favorites page
+          if (!r.starred) {
+            btn.closest('tr').remove();
+            if (document.querySelectorAll('.file-table tbody tr').length === 0) {
+              window.location.reload();
+            }
+          }
+        } else {
+          alert('Error: ' + r.msg);
+        }
+      });
+  }
+
+  // Details Drawer functions
+  let activeDetailsPath = '';
+  function openDetails(path) {
+    activeDetailsPath = path;
+    switchDrawerTab('details');
+    fetch('/details/' + encodeURIComponent(path))
+      .then(r => r.json())
+      .then(r => {
+        if (r.status === 'success') {
+          const headerEl = document.getElementById('drawerItemName');
+          headerEl.textContent = (r.is_dir ? '📁 ' : '📄 ') + r.name + ' ';
+          const starBtn = document.createElement('button');
+          starBtn.id = 'drawerStarBtn';
+          starBtn.className = 'star-btn' + (r.starred ? ' starred' : '');
+          starBtn.textContent = '★';
+          starBtn.onclick = function() { toggleStar(r.rel_path, starBtn); };
+          headerEl.appendChild(starBtn);
+          
+          document.getElementById('metaName').textContent = r.name;
+          document.getElementById('metaPath').textContent = r.rel_path || 'Root';
+          document.getElementById('metaType').textContent = r.is_dir ? 'Folder' : (r.name.split('.').pop().toUpperCase() + ' File');
+          document.getElementById('metaSize').textContent = formatBytes(r.size);
+          document.getElementById('metaMtime').textContent = formatTime(r.mtime);
+          
+          renderComments(r.comments);
+          renderShares(r.shares, r.can_edit);
+          if (r.can_edit) {
+            document.getElementById('sharingFormContainer').classList.remove('hidden');
+          } else {
+            document.getElementById('sharingFormContainer').classList.add('hidden');
+          }
+          renderActivity(r.activity);
+          document.getElementById('detailsDrawer').classList.remove('hidden');
+        } else {
+          alert('Error: ' + r.msg);
+        }
+      });
+  }
+  
+  function closeDetails() {
+    document.getElementById('detailsDrawer').classList.add('hidden');
+    activeDetailsPath = '';
+  }
+  
+  function switchDrawerTab(tab) {
+    ['details', 'comments', 'sharing', 'activity'].forEach(t => {
+      document.getElementById('tab' + t.charAt(0).toUpperCase() + t.slice(1)).classList.toggle('active', t === tab);
+      document.getElementById('pane' + t.charAt(0).toUpperCase() + t.slice(1)).classList.toggle('active', t === tab);
+    });
+  }
+  
+  function formatBytes(bytes) {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  }
+  
+  function formatTime(ts) {
+    if (!ts) return '—';
+    const d = new Date(ts * 1000);
+    return d.toLocaleString();
+  }
+  
+  function renderComments(comments) {
+    const list = document.getElementById('drawerCommentsList');
+    list.innerHTML = '';
+    if (!comments.length) {
+      list.innerHTML = '<div style="font-size:0.8rem;color:var(--muted);text-align:center;padding:12px;">No comments yet.</div>';
+      return;
+    }
+    comments.forEach(c => {
+      const el = document.createElement('div');
+      el.className = 'comment-bubble';
+      el.innerHTML = `
+        <div class="comment-meta">
+          <span class="comment-user">${c.user}</span>
+          <span class="comment-time">${c.timestamp.replace('T', ' ')}</span>
+        </div>
+        <div class="comment-text">${escapeHTML(c.text)}</div>
+      `;
+      list.appendChild(el);
+    });
+  }
+  
+  function submitComment() {
+    const input = document.getElementById('commentInput');
+    const text = input.value.trim();
+    if (!text) return;
+    const fd = new FormData();
+    fd.append('text', text);
+    fetch('/comments/' + encodeURIComponent(activeDetailsPath) + '/add', { method: 'POST', body: fd })
+      .then(r => r.json())
+      .then(r => {
+        if (r.status === 'success') {
+          input.value = '';
+          openDetails(activeDetailsPath);
+        } else {
+          alert('Error: ' + r.msg);
+        }
+      });
+  }
+  
+  function renderShares(shares, canEdit) {
+    const list = document.getElementById('drawerSharesList');
+    list.innerHTML = '';
+    if (!shares.length) {
+      list.innerHTML = '<div style="font-size:0.8rem;color:var(--muted);text-align:center;padding:12px;">Not shared with any users.</div>';
+      return;
+    }
+    shares.forEach(s => {
+      const el = document.createElement('div');
+      el.className = 'share-item';
+      el.innerHTML = `
+        <div class="share-item-info">
+          <span class="share-item-user">${s.user}</span>
+          <span class="share-item-perm">${s.permission}</span>
+        </div>
+        ${canEdit ? `<button class="revoke-share-btn" onclick="revokeInternalShare('${s.user}')">Revoke</button>` : ''}
+      `;
+      list.appendChild(el);
+    });
+  }
+  
+  function submitInternalShare() {
+    const userIn = document.getElementById('shareUserInput');
+    const permIn = document.getElementById('sharePermInput');
+    const user = userIn.value.trim();
+    const perm = permIn.value;
+    if (!user) return;
+    const fd = new FormData();
+    fd.append('path', activeDetailsPath);
+    fd.append('user', user);
+    fd.append('permission', perm);
+    fetch('/share/internal/add', { method: 'POST', body: fd })
+      .then(r => r.json())
+      .then(r => {
+        if (r.status === 'success') {
+          userIn.value = '';
+          openDetails(activeDetailsPath);
+        } else {
+          alert('Error: ' + r.msg);
+        }
+      });
+  }
+  
+  function revokeInternalShare(targetUser) {
+    if (!confirm('Revoke access for ' + targetUser + '?')) return;
+    const fd = new FormData();
+    fd.append('path', activeDetailsPath);
+    fd.append('user', targetUser);
+    fetch('/share/internal/remove', { method: 'POST', body: fd })
+      .then(r => r.json())
+      .then(r => {
+        if (r.status === 'success') {
+          openDetails(activeDetailsPath);
+        } else {
+          alert('Error: ' + r.msg);
+        }
+      });
+  }
+  
+  function renderActivity(activity) {
+    const list = document.getElementById('drawerActivityList');
+    list.innerHTML = '';
+    if (!activity.length) {
+      list.innerHTML = '<div style="font-size:0.8rem;color:var(--muted);text-align:center;padding:12px;">No activity logged.</div>';
+      return;
+    }
+    activity.forEach(a => {
+      const el = document.createElement('div');
+      el.className = 'activity-item';
+      el.innerHTML = `
+        <strong>${a.user}</strong> ${a.action} ${a.extra ? `(${a.extra})` : ''}
+        <span class="activity-time">${a.ts.replace('T', ' ')}</span>
+      `;
+      list.appendChild(el);
+    });
+  }
+  
+  function escapeHTML(str) {
+    return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+  }
+
+  // Preview modals
+  function openPreview(url, name) {
+    document.getElementById('previewTitle').textContent = name;
+    document.getElementById('previewDownload').href = url.replace('/preview/','/download/');
+    const body = document.getElementById('previewBody');
+    const ext  = name.split('.').pop().toLowerCase();
+    if (['png','jpg','jpeg','gif','svg','webp','bmp'].includes(ext))
+      body.innerHTML = '<img src="'+url+'" style="max-width:100%;max-height:70vh;border-radius:8px;" />';
+    else if (['mp4','webm','mov'].includes(ext))
+      body.innerHTML = '<video controls style="max-width:100%;max-height:70vh;"><source src="'+url+'"></video>';
+    else if (['mp3','wav','ogg','flac'].includes(ext))
+      body.innerHTML = '<audio controls style="width:100%;"><source src="'+url+'"></audio>';
+    else if (ext === 'pdf')
+      body.innerHTML = '<iframe src="'+url+'" style="width:100%;height:70vh;border:none;border-radius:8px;"></iframe>';
+    else
+      fetch(url).then(r=>r.text()).then(t=>{body.innerHTML='<pre class="preview-text">'+t.replace(/</g,'&lt;')+'</pre>';});
+    document.getElementById('previewModal').classList.remove('hidden');
+  }
+  
+  function closePreview() {
+    document.getElementById('previewModal').classList.add('hidden');
+    document.getElementById('previewBody').innerHTML = '';
+  }
+  
+  document.addEventListener('keydown', e => { if(e.key==='Escape') { closePreview(); ['previewModal','detailsDrawer'].forEach(id=>document.getElementById(id).classList.add('hidden')); } });
+</script>
+{% endblock %}

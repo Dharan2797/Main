@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Versions – {{ fname }} – FileVault{% endblock %}
+{% block body %}
+<div class="app-layout">
+  <aside class="sidebar">
+    <div class="sidebar-logo"><div class="logo-icon">🗄️</div><span class="logo-text">File<span>Vault</span></span></div>
+    <nav class="sidebar-nav">
+      <a href="{{ url_for('index') }}" class="nav-item"><span class="nav-icon">🏠</span><span class="nav-label">Home</span></a>
+      <a href="{{ url_for('favorites_page') }}" class="nav-item"><span class="nav-icon">⭐</span><span class="nav-label">Favorites</span></a>
+      <a href="{{ url_for('shared_with_me_page') }}" class="nav-item"><span class="nav-icon">👥</span><span class="nav-label">Shared with me</span></a>
+      <a href="{{ url_for('shares_page') }}" class="nav-item"><span class="nav-icon">🔗</span><span class="nav-label">Share Links</span></a>
+      <a href="{{ url_for('activity') }}" class="nav-item"><span class="nav-icon">📋</span><span class="nav-label">Activity Log</span></a>
+      <a href="{{ url_for('trash') }}" class="nav-item"><span class="nav-icon">🗑</span><span class="nav-label">Recycle Bin</span></a>
+      <a href="{{ url_for('quotas_page') }}" class="nav-item"><span class="nav-icon">⚙️</span><span class="nav-label">Storage Quotas</span></a>
+      {% if current_user.is_admin %}
+      <a href="{{ url_for('admin_users') }}" class="nav-item"><span class="nav-icon">👥</span><span class="nav-label">Users</span></a>
+      <a href="{{ url_for('admin_acl') }}" class="nav-item"><span class="nav-icon">🔐</span><span class="nav-label">Folder Access</span></a>
+      <a href="{{ url_for('admin_rules') }}" class="nav-item"><span class="nav-icon">🛡️</span><span class="nav-label">Upload Rules</span></a>
+      {% endif %}
+    </nav>
+    <div class="sidebar-footer">
+      <div class="user-badge">
+        <div class="user-avatar">{{ current_user.id[0].upper() }}</div>
+        <div class="user-info"><div class="name">{{ current_user.id }}</div><div class="role">{{ current_user.role|capitalize }}</div></div>
+        <a href="{{ url_for('logout') }}" class="logout-btn" title="Sign out">⏏</a>
+      </div>
+    </div>
+  </aside>
+
+  <div class="main-content">
+    <header class="topbar"><h1>🕓 Version History</h1></header>
+    <div class="page-body">
+      {% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}
+        <ul class="flash-list">{% for cat,msg in messages %}<li class="flash-msg {{ cat }}">{% if cat=='success' %}✅{% else %}❌{% endif %} {{ msg }}</li>{% endfor %}</ul>
+      {% endif %}{% endwith %}
+
+      <div class="quota-info-banner">
+        <span class="banner-icon">📄</span>
+        <div>Showing all saved versions of <strong>{{ fname }}</strong>
+          — <a href="{{ url_for('index', folder=folder_sub) }}" style="color:var(--accent);">Back to folder</a></div>
+      </div>
+
+      {% if versions %}
+      <div class="file-manager-card">
+        <table class="file-table">
+          <thead><tr><th>#</th><th>Saved</th><th>Size</th><th>Actions</th></tr></thead>
+          <tbody>
+          {% for v in versions %}
+          <tr>
+            <td><span class="type-badge">v{{ loop.index }}</span></td>
+            <td class="date-cell">{{ v.saved_at|datetimeformat }}</td>
+            <td class="size-cell">{{ v.size|filesizeformat }}</td>
+            <td>
+              <div class="action-row">
+                <a href="{{ url_for('version_download', filepath=filepath, ts=v.ts) }}" class="btn btn-ghost btn-sm">⬇ Download</a>
+                {% if current_user.is_editor %}
+                <form class="inline-form" action="{{ url_for('version_restore') }}" method="post"
+                      onsubmit="return confirm('Restore this version? The current file will be saved as a new version.')">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                  <input type="hidden" name="filepath" value="{{ filepath }}" />
+                  <input type="hidden" name="ts" value="{{ v.ts }}" />
+                  <button class="btn btn-primary btn-sm">↩ Restore</button>
+                </form>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="empty-state"><span class="empty-icon">🕓</span><p>No previous versions found. Versions are saved automatically when a file is overwritten.</p></div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

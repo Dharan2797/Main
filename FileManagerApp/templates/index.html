@@ -1,0 +1,985 @@
+{% extends "base.html" %}
+{% block title %}{{ current_folder or 'Home' }} – FileVault{% endblock %}
+{% block body %}
+{% set crumb_parts = current_folder.split('\\') if current_folder and current_folder != '.' else [] %}
+<div class="app-layout">
+
+  <!-- ═══ SIDEBAR ══════════════════════════════════════════════════════════ -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-icon">🗄️</div>
+      <span class="logo-text">File<span>Vault</span></span>
+    </div>
+    <nav class="sidebar-nav">
+      <a href="{{ url_for('utilization') }}" class="nav-item">
+        <span class="nav-icon">📈</span><span class="nav-label">Analytics</span>
+      </a>
+      <a href="{{ url_for('index') }}" class="nav-item {% if not current_folder or current_folder=='.' %}active{% endif %}">
+        <span class="nav-icon">🏠</span><span class="nav-label">Home</span>
+      </a>
+      <a href="{{ url_for('favorites_page') }}" class="nav-item">
+        <span class="nav-icon">⭐</span><span class="nav-label">Favorites</span>
+      </a>
+      <a href="{{ url_for('shared_with_me_page') }}" class="nav-item">
+        <span class="nav-icon">👥</span><span class="nav-label">Shared with me</span>
+      </a>
+      <button class="nav-item" id="newFolderBtn">
+        <span class="nav-icon">📁</span><span class="nav-label">New Folder</span>
+      </button>
+      <button class="nav-item" onclick="switchTab('file');document.getElementById('fileInput').click()">
+        <span class="nav-icon">⬆️</span><span class="nav-label">Upload File</span>
+      </button>
+      <button class="nav-item" onclick="switchTab('folder');document.getElementById('folderInput').click()">
+        <span class="nav-icon">📤</span><span class="nav-label">Upload Folder</span>
+      </button>
+      <a href="{{ url_for('search') }}" class="nav-item">
+        <span class="nav-icon">🔍</span><span class="nav-label">Search</span>
+      </a>
+      <a href="{{ url_for('shares_page') }}" class="nav-item">
+        <span class="nav-icon">🔗</span><span class="nav-label">Share Links</span>
+      </a>
+      <a href="{{ url_for('activity') }}" class="nav-item">
+        <span class="nav-icon">📋</span><span class="nav-label">Activity Log</span>
+      </a>
+      <a href="{{ url_for('trash') }}" class="nav-item">
+        <span class="nav-icon">🗑</span><span class="nav-label">Recycle Bin</span>
+      </a>
+      <a href="{{ url_for('quotas_page') }}" class="nav-item">
+        <span class="nav-icon">⚙️</span><span class="nav-label">Storage Quotas</span>
+      </a>
+      {% if current_user.is_admin %}
+      <a href="{{ url_for('admin_users') }}" class="nav-item">
+        <span class="nav-icon">👥</span><span class="nav-label">Users</span>
+      </a>
+      <a href="{{ url_for('admin_acl') }}" class="nav-item">
+        <span class="nav-icon">🔐</span><span class="nav-label">Folder Access</span>
+      </a>
+      <a href="{{ url_for('admin_rules') }}" class="nav-item">
+        <span class="nav-icon">🛡️</span><span class="nav-label">Upload Rules</span>
+      </a>
+      {% endif %}
+    </nav>
+    <div class="sidebar-footer">
+      <div class="user-badge">
+        <div class="user-avatar">{{ current_user.id[0].upper() }}</div>
+        <div class="user-info">
+          <div class="name">{{ current_user.id }}</div>
+          <div class="role">Administrator</div>
+        </div>
+        <a href="{{ url_for('logout') }}" class="logout-btn" title="Sign out">⏏</a>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ═══ MAIN ═════════════════════════════════════════════════════════════ -->
+  <div class="main-content">
+
+    <!-- Topbar -->
+    <header class="topbar">
+      <h1>File Manager</h1>
+      <div class="search-wrap">
+        <span class="search-icon">🔍</span>
+        <input id="searchInput" type="text" placeholder="Filter this folder…" autocomplete="off" />
+      </div>
+      <div class="topbar-actions">
+        {% if current_folder and current_folder != '.' %}
+          {% set folder_escaped = current_folder.replace('\\', '/') %}
+          {% set folder_name = folder_escaped.split('/')[-1] %}
+          <button class="btn btn-ghost btn-sm" onclick="openDetails('{{ folder_escaped }}')" title="Folder Info / Share Internally">ℹ️ Folder Info</button>
+          <button class="btn btn-ghost btn-sm" onclick="openShareModal('{{ folder_escaped }}')" title="Share Folder (Read-Only)">🔗 Share Link</button>
+          <button class="btn btn-ghost btn-sm" onclick="openFolderShareModal('{{ folder_escaped }}','{{ folder_name }}')" title="Share Folder Upload Link">📤 Share Upload</button>
+        {% endif %}
+        <!-- View toggle -->
+        <button class="btn btn-ghost btn-sm" id="viewToggleBtn" onclick="toggleView()" title="Toggle view">⊞</button>
+        <button class="btn btn-ghost btn-sm" id="newFolderBtn2">📁 New Folder</button>
+        <div class="dropdown">
+          <button class="btn btn-primary btn-sm dropdown-toggle" id="uploadDropdownBtn">⬆️ Upload</button>
+          <div class="dropdown-menu" id="uploadDropdownMenu">
+            <button class="dropdown-item" onclick="switchTab('file');document.getElementById('fileInput').click()">📄 Upload Files</button>
+            <button class="dropdown-item" onclick="switchTab('folder');document.getElementById('folderInput').click()">📁 Upload Folder</button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Breadcrumb -->
+    <nav class="breadcrumb" style="display: flex; align-items: center; gap: 8px;">
+      {% if current_folder and current_folder != '.' %}
+        {% set parts = current_folder.replace('\\', '/').split('/') %}
+        {% set parent = parts[:-1]|join('/') %}
+        <a href="{{ url_for('index', folder=parent) if parent else url_for('index') }}" class="btn btn-ghost btn-sm" style="padding: 2px 8px; font-size: 0.8rem; height: auto; text-decoration: none; border: 1px solid rgba(2, 132, 199, 0.25); display: inline-flex; align-items: center;">↩️ Back</a>
+      {% endif %}
+      <a href="{{ url_for('index') }}">🏠 Home</a>
+      {% for part in crumb_parts %}{% if part and part != '.' %}
+        <span class="sep">›</span>
+        {% set partial = crumb_parts[:loop.index]|join('\\') %}
+        {% if loop.last %}<span class="current">{{ part }}</span>
+        {% else %}<a href="{{ url_for('index', folder=partial) }}">{{ part }}</a>{% endif %}
+      {% endif %}{% endfor %}
+    </nav>
+
+    <!-- Flash messages -->
+    <div style="padding:0 28px;">
+      {% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}
+        <ul class="flash-list" style="margin-top:14px;">
+          {% for cat, msg in messages %}
+          <li class="flash-msg {{ cat }}">
+            {% if cat=='success' %}✅{% elif cat=='error' %}❌{% else %}ℹ️{% endif %} {{ msg }}
+          </li>{% endfor %}
+        </ul>
+      {% endif %}{% endwith %}
+    </div>
+
+    <div class="page-body">
+
+      <!-- Stats -->
+      <div class="stats-row">
+        <div class="stat-card"><div class="stat-icon blue">📁</div><div class="stat-info"><div class="stat-label">Folders</div><div class="stat-value">{{ folders|length }}</div></div></div>
+        <div class="stat-card"><div class="stat-icon green">📄</div><div class="stat-info"><div class="stat-label">Files</div><div class="stat-value">{{ files|length }}</div></div></div>
+        <div class="stat-card"><div class="stat-icon purple">💾</div><div class="stat-info"><div class="stat-label">Used Space</div><div class="stat-value">{{ curr_used|filesizeformat }}</div></div></div>
+        <div class="stat-card"><div class="stat-icon orange">📊</div><div class="stat-info"><div class="stat-label">Quota</div>
+          <div class="stat-value" style="font-size:0.9rem;">{% if quota_info %}{{ quota_info.used|filesizeformat }} / {{ quota_info.limit|filesizeformat }}{% else %}Unlimited{% endif %}</div>
+        </div></div>
+      </div>
+
+      {% if quota_info %}
+      <div class="folder-quota-bar-wrap">
+        <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+          <span style="font-size:0.8rem;color:var(--muted);">Storage usage for <strong style="color:var(--accent-2);">{{ current_folder or 'Root' }}</strong></span>
+          <span style="font-size:0.8rem;color:var(--muted);">{{ quota_info.pct }}%</span>
+        </div>
+        <div class="quota-track"><div class="quota-fill {% if quota_info.pct>=90 %}danger{% elif quota_info.pct>=70 %}warn{% endif %}" style="width:{{ quota_info.pct }}%;"></div></div>
+        <div style="display:flex;justify-content:space-between;margin-top:5px;font-size:0.75rem;color:var(--muted);">
+          <span>{{ quota_info.used|filesizeformat }} used</span>
+          <span>{{ quota_info.free|filesizeformat }} free of {{ quota_info.limit|filesizeformat }}</span>
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- Hidden forms -->
+      <form id="uploadForm" action="{{ url_for('upload') }}" method="post" enctype="multipart/form-data" style="display:none;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+        <input type="hidden" name="folder" value="{{ current_folder or '' }}" />
+        <input type="file" id="fileInput" name="file" />
+      </form>
+      <form id="folderUploadForm" action="{{ url_for('upload_folder_stub') }}" method="post" enctype="multipart/form-data" style="display:none;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+        <input type="hidden" name="dest_folder" value="{{ current_folder or '' }}" />
+        <input type="file" id="folderInput" name="files" multiple webkitdirectory />
+      </form>
+
+      <!-- Upload card (collapsible) -->
+      <div class="upload-card">
+        <div class="card-header" onclick="toggleUploadPanel()" style="cursor:pointer;user-select:none;">
+          <span class="card-title">⬆️ Upload <span style="font-size:0.75rem;color:var(--muted);margin-left:6px;">Into: <strong style="color:var(--accent-2);">{{ current_folder or 'Root' }}</strong>
+            {% if quota_info %}&nbsp;·&nbsp;<span style="color:{% if quota_info.pct>=90 %}var(--danger){% elif quota_info.pct>=70 %}var(--warning){% else %}var(--success){% endif %};">{{ quota_info.free|filesizeformat }} free</span>{% endif %}
+          </span></span>
+          <span id="uploadPanelToggle" style="font-size:0.8rem;color:var(--muted);margin-left:auto;">▼ Expand</span>
+        </div>
+        <div id="uploadPanelBody" style="display:none;">
+          <div class="upload-tabs">
+            <button class="upload-tab active" id="tabFile" onclick="switchTab('file')">📄 Upload Files</button>
+            <button class="upload-tab" id="tabFolder" onclick="switchTab('folder')">📁 Upload Folder</button>
+          </div>
+          <div id="panelFile">
+            <div class="drop-zone" id="dropZone"><span class="drop-icon">☁️</span><div id="dropLabel"><strong>Click to browse</strong> or drag &amp; drop files here</div></div>
+            <div class="upload-row">
+              <button type="submit" form="uploadForm" class="btn btn-primary">⬆️ Upload File</button>
+              <span style="font-size:0.78rem;color:var(--muted);">No file size limit · All types</span>
+            </div>
+          </div>
+          <div id="panelFolder" style="display:none;">
+            <div class="drop-zone" id="folderDropZone" onclick="document.getElementById('folderInput').click()">
+              <span class="drop-icon">📁</span><div id="folderDropLabel"><strong>Click to select a folder</strong> — structure is preserved</div>
+            </div>
+            <div class="upload-row">
+              <button class="btn btn-primary" onclick="submitFolderUpload()">⬆️ Upload Folder</button>
+            </div>
+            <div id="folderProgressList" class="folder-progress-list hidden"></div>
+          </div>
+          <div id="progressWrap" class="progress-wrap hidden">
+            <div class="progress-track"><div id="progressBar"></div></div>
+            <span id="progressText">0%</span>
+          </div>
+          <div id="uploadStatus" class="upload-status hidden"></div>
+        </div>
+      </div>
+
+      <!-- Bulk action bar -->
+      <div id="bulkBar" class="bulk-bar hidden">
+        <span id="bulkCount">0 selected</span>
+        <button class="btn btn-success btn-sm" onclick="bulkDownloadZip()">⬇ Download ZIP</button>
+        <button class="btn btn-danger btn-sm" onclick="bulkDelete()">🗑 Delete Selected</button>
+        <button class="btn btn-ghost btn-sm" onclick="clearSelection()">✕ Clear</button>
+      </div>
+      <!-- Hidden form for batch download -->
+      <form id="batchDownloadForm" action="{{ url_for('batch_download') }}" method="post" style="display:none;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+        <input type="hidden" name="paths" id="batchPaths" />
+      </form>
+
+      <!-- File Manager Card -->
+      <div class="file-manager-card">
+        <div class="card-header" style="padding:16px 20px 0;display:flex;align-items:center;gap:10px;">
+          <span class="card-title">📂 Contents</span>
+          <div style="margin-left:auto;display:flex;gap:8px;">
+            {% if current_folder and current_folder!='.' %}
+              <a href="{{ url_for('download_zip', folder_path=current_folder) }}" class="btn btn-ghost btn-sm">🗜 Download ZIP</a>
+            {% endif %}
+            {% if quota_info %}
+              <a href="{{ url_for('quotas_page') }}" class="btn btn-ghost btn-sm">⚙️ Manage Quota</a>
+            {% else %}
+              <a href="{{ url_for('quotas_page') }}" class="btn btn-ghost btn-sm">➕ Set Quota</a>
+            {% endif %}
+          </div>
+        </div>
+
+        {% if folders or files %}
+        <!-- Sort bar -->
+        <div class="sort-bar">
+          <label style="font-size:0.78rem;color:var(--muted);">Sort by:</label>
+          <button class="sort-btn active" data-sort="name">Name</button>
+          <button class="sort-btn" data-sort="size">Size</button>
+          <button class="sort-btn" data-sort="date">Date</button>
+          <button class="sort-dir-btn" id="sortDirBtn" onclick="toggleSortDir()">↑</button>
+        </div>
+
+        <!-- LIST VIEW (default) -->
+        <div id="listView">
+        <div class="file-table-wrapper">
+        <table class="file-table" id="fileTable">
+          <thead>
+            <tr>
+              <th style="width:32px;"><input type="checkbox" id="selectAll" onchange="toggleSelectAll(this)" /></th>
+              <th>Name</th><th>Type</th><th>Size / Usage</th><th>Last Modified</th><th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="fileTableBody">
+
+            {% if current_folder and current_folder!='.' %}
+              {% set parts = current_folder.split('\\') %}
+              {% set parent = parts[:-1]|join('\\') %}
+              <tr><td colspan="6" style="padding:10px 16px;">
+                <a href="{{ url_for('index', folder=parent) if parent else url_for('index') }}" style="color:var(--muted);text-decoration:none;font-size:0.85rem;">⬆ Up to parent</a>
+              </td></tr>
+            {% endif %}
+
+            {% for folder in folders %}
+              {% set fp = (current_folder+'/'+folder.name).strip('/') if current_folder and current_folder!='.' else folder.name %}
+              <tr class="folder-row" data-name="{{ folder.name }}" data-size="0" data-date="0">
+                <td><input type="checkbox" class="row-check" data-path="{{ fp }}" data-type="folder" /></td>
+                <td>
+                  <div class="file-name-cell">
+                    <span class="file-icon">📁</span>
+                    <a class="folder-link" href="{{ url_for('index', folder=folder.sub_path) }}">{{ folder.name }}</a>
+                    <button class="star-btn {% if folder.starred %}starred{% endif %}" onclick="toggleStar('{{ fp }}', this)" title="Favorite">★</button>
+                    <button class="rename-btn icon-btn" title="Rename" onclick="openRenameModal('{{ fp }}','{{ folder.name }}','folder')">✏️</button>
+                  </div>
+                </td>
+                <td><span class="type-badge folder-badge">Folder</span></td>
+                <td>
+                  {% if folder.has_quota %}
+                    <div style="min-width:120px;">
+                      <div style="font-size:0.75rem;color:var(--muted);margin-bottom:3px;">{{ folder.used|filesizeformat }} / {{ folder.quota_bytes|filesizeformat }}</div>
+                      {% set fpct = [folder.used/folder.quota_bytes*100,100]|min|round(1) %}
+                      <div class="quota-track" style="height:5px;"><div class="quota-fill {% if fpct>=90 %}danger{% elif fpct>=70 %}warn{% endif %}" style="width:{{ fpct }}%;"></div></div>
+                    </div>
+                  {% else %}
+                    <span style="color:var(--muted);font-size:0.82rem;">{{ folder.used|filesizeformat }}</span>
+                  {% endif %}
+                </td>
+                <td class="date-cell">—</td>
+                <td>
+                  <div class="action-row">
+                    <button class="btn btn-ghost btn-sm" onclick="openDetails('{{ fp }}')" title="Info">ℹ️</button>
+                    <a href="{{ url_for('download_zip', folder_path=fp) }}" class="btn btn-ghost btn-sm" title="Download as ZIP" target="_blank">🗜</a>
+                    <button class="btn btn-ghost btn-sm" onclick="openMoveModal('{{ fp }}','{{ folder.name }}')" title="Move/Copy">✂️</button>
+                    <button class="btn btn-ghost btn-sm" onclick="openShareModal('{{ fp }}')" title="Share (Read-Only)">🔗</button>
+                    <button class="btn btn-ghost btn-sm" onclick="openFolderShareModal('{{ fp }}','{{ folder.name }}')" title="Share Folder Upload Link">📤</button>
+                    <form class="delete-form inline-form" action="{{ url_for('delete_folder', folder_path=fp) }}" method="post" data-name="{{ folder.name }}">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                      <button class="btn btn-danger btn-sm">🗑</button>
+                    </form>
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+
+            {% for f in files %}
+              {% set dl = (f.folder+'/'+f.name).strip('/') if f.folder and f.folder!='.' else f.name %}
+              {% set shared = f.name in shared_names %}
+              <tr class="file-row" data-name="{{ f.name }}" data-size="{{ f.size }}" data-date="{{ f.mtime }}">
+                <td><input type="checkbox" class="row-check" data-path="{{ dl }}" data-type="file" /></td>
+                <td>
+                  <div class="file-name-cell">
+                    <span class="file-icon">
+                      {% if f.name|is_app_file %}
+                        <span class="app-icon-container" style="display: inline-flex; align-items: center;">
+                          <img src="{{ url_for('get_app_icon', filename=dl) }}" alt="APP" style="width:1.2em; height:1.2em; vertical-align:middle; border-radius:4px;" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline-block';" />
+                          <span style="display:none;">{{ f.name|fileicon }}</span>
+                        </span>
+                      {% else %}
+                        {{ f.name|fileicon }}
+                      {% endif %}
+                    </span>
+                    <a href="#" class="file-name-text preview-link" onclick="handleFileClick('{{ dl }}','{{ f.name }}');return false;">{{ f.name }}</a>
+                    <button class="star-btn {% if f.starred %}starred{% endif %}" onclick="toggleStar('{{ dl }}', this)" title="Favorite">★</button>
+                    <button class="rename-btn icon-btn" title="Rename" onclick="openRenameModal('{{ dl }}','{{ f.name }}','file')">✏️</button>
+                    {% if shared %}<span class="shared-badge">🔗</span>{% endif %}
+                  </div>
+                </td>
+                <td><span class="type-badge">{{ f.name.rsplit('.',1)[-1].upper() if '.' in f.name else 'FILE' }}</span></td>
+                <td class="size-cell">{{ f.size|filesizeformat }}</td>
+                <td class="date-cell">{{ f.mtime|datetimeformat }}</td>
+                <td>
+                  <div class="action-row">
+                    <button class="btn btn-ghost btn-sm" onclick="openDetails('{{ dl }}')" title="Info">ℹ️</button>
+                    {% if f.name|previewable %}
+                      <button class="btn btn-ghost btn-sm" onclick="openPreview('{{ url_for('preview', filename=dl) }}','{{ f.name }}')" title="Preview">👁</button>
+                    {% endif %}
+                    <a class="btn btn-success btn-sm" href="{{ url_for('download', filename=dl) }}" title="Download" target="_blank">⬇</a>
+                    <a class="btn btn-ghost btn-sm" href="{{ url_for('file_versions', filepath=dl) }}" title="Version History">🕓</a>
+                    <button class="btn btn-ghost btn-sm" onclick="openMoveModal('{{ dl }}','{{ f.name }}')" title="Move/Copy">✂️</button>
+                    <button class="btn btn-ghost btn-sm" onclick="openShareModal('{{ dl }}')" title="Share">🔗</button>
+                    <form class="delete-form inline-form" action="{{ url_for('delete', filename=dl) }}" method="post" data-name="{{ f.name }}">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                      <button class="btn btn-danger btn-sm" title="Delete (→ Trash)">🗑</button>
+                    </form>
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+
+          </tbody>
+        </table>
+        </div><!-- /file-table-wrapper -->
+        </div>
+
+        <!-- GRID VIEW -->
+        <div id="gridView" style="display:none;">
+          <div class="file-grid" id="fileGrid">
+            {% for folder in folders %}
+              {% set fp = (current_folder+'/'+folder.name).strip('/') if current_folder and current_folder!='.' else folder.name %}
+              <div class="grid-card folder-row" data-name="{{ folder.name }}" data-size="0" data-date="0">
+                <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; margin-bottom: 8px;">
+                  <button class="star-btn {% if folder.starred %}starred{% endif %}" onclick="event.stopPropagation(); toggleStar('{{ fp }}', this)" title="Favorite">★</button>
+                  <button class="info-btn" onclick="event.stopPropagation(); openDetails('{{ fp }}')" title="Info">ℹ️</button>
+                </div>
+                <a href="{{ url_for('index', folder=folder.sub_path) }}" class="grid-icon">📁</a>
+                <div class="grid-name">{{ folder.name }}</div>
+                <div class="grid-meta">{{ folder.used|filesizeformat }}</div>
+              </div>
+            {% endfor %}
+            {% for f in files %}
+              {% set dl = (f.folder+'/'+f.name).strip('/') if f.folder and f.folder!='.' else f.name %}
+              <div class="grid-card file-row" data-name="{{ f.name }}" data-size="{{ f.size }}" data-date="{{ f.mtime }}">
+                <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; margin-bottom: 8px;">
+                  <button class="star-btn {% if f.starred %}starred{% endif %}" onclick="event.stopPropagation(); toggleStar('{{ dl }}', this)" title="Favorite">★</button>
+                  <button class="info-btn" onclick="event.stopPropagation(); openDetails('{{ dl }}')" title="Info">ℹ️</button>
+                </div>
+                {% if f.name|previewable and f.name.rsplit('.',1)[-1].lower() in ['png','jpg','jpeg','gif','webp'] %}
+                  <img class="grid-thumb" src="{{ url_for('preview', filename=dl) }}" alt="{{ f.name }}" onclick="handleFileClick('{{ dl }}','{{ f.name }}')" />
+                {% elif f.name|is_app_file %}
+                  <div class="grid-icon" onclick="handleFileClick('{{ dl }}','{{ f.name }}')">
+                    <img src="{{ url_for('get_app_icon', filename=dl) }}" alt="APP" style="width:64px; height:64px; object-fit:contain; border-radius:8px;" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline-block';" />
+                    <span style="display:none;">{{ f.name|fileicon(size='64px') }}</span>
+                  </div>
+                {% else %}
+                  <div class="grid-icon" onclick="handleFileClick('{{ dl }}','{{ f.name }}')">{{ f.name|fileicon(size='64px') }}</div>
+                {% endif %}
+                <div class="grid-name" title="{{ f.name }}" onclick="handleFileClick('{{ dl }}','{{ f.name }}')" style="cursor:pointer;">{{ f.name }}</div>
+                <div class="grid-meta">{{ f.size|filesizeformat }}</div>
+                <div class="grid-actions">
+                  <a href="{{ url_for('download', filename=dl) }}" class="btn btn-success btn-sm">⬇</a>
+                  <form class="delete-form inline-form" action="{{ url_for('delete', filename=dl) }}" method="post" data-name="{{ f.name }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}" /><button class="btn btn-danger btn-sm">🗑</button></form>
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+
+        {% else %}
+        <div class="empty-state"><span class="empty-icon">📭</span><p>This folder is empty. Upload a file or create a sub-folder.</p></div>
+        {% endif %}
+      </div><!-- /file-manager-card -->
+
+    </div><!-- /page-body -->
+  </div><!-- /main-content -->
+</div><!-- /app-layout -->
+
+<!-- ══ NEW FOLDER MODAL ══════════════════════════════════════════════════════ -->
+<div class="modal-backdrop hidden" id="folderModal">
+  <div class="modal-box">
+    <button class="modal-close-btn" onclick="document.getElementById('folderModal').classList.add('hidden')">✕</button>
+    <h2>📁 Create New Folder</h2>
+    <form action="{{ url_for('create_folder') }}" method="post">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+      <input type="hidden" name="parent_folder" value="{{ current_folder or '' }}" />
+      <div class="form-group"><label>Folder Name</label>
+        <input id="folderNameInput" class="form-input" type="text" name="folder_name" placeholder="e.g. Documents" required /></div>
+      <div class="form-group" style="margin-bottom:14px;"><label>Visibility / Permission</label>
+        <select class="form-input" name="visibility">
+          <option value="public">🌐 Public (Open to all authorized users)</option>
+          <option value="private">🔒 Private (Only me & Administrators)</option>
+        </select></div>
+      <div style="font-size:0.8rem;color:var(--muted);margin-bottom:16px;">Inside: <strong>{{ current_folder or 'Root' }}</strong></div>
+      <div style="display:flex;gap:10px;">
+        <button type="submit" class="btn btn-primary" style="flex:1;justify-content:center;">📁 Create</button>
+        <button type="button" class="btn btn-ghost" onclick="document.getElementById('folderModal').classList.add('hidden')" style="flex:1;justify-content:center;">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ══ RENAME MODAL ══════════════════════════════════════════════════════════ -->
+<div class="modal-backdrop hidden" id="renameModal">
+  <div class="modal-box">
+    <button class="modal-close-btn" onclick="document.getElementById('renameModal').classList.add('hidden')">✕</button>
+    <h2>✏️ Rename</h2>
+    <div class="form-group"><label>New Name</label>
+      <input id="renameInput" class="form-input" type="text" placeholder="Enter new name" /></div>
+    <div style="display:flex;gap:10px;margin-top:16px;">
+      <button class="btn btn-primary" style="flex:1;justify-content:center;" onclick="submitRename()">✏️ Rename</button>
+      <button class="btn btn-ghost" onclick="document.getElementById('renameModal').classList.add('hidden')" style="flex:1;justify-content:center;">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MOVE / COPY MODAL ═════════════════════════════════════════════════════ -->
+<div class="modal-backdrop hidden" id="moveModal">
+  <div class="modal-box">
+    <button class="modal-close-btn" onclick="document.getElementById('moveModal').classList.add('hidden')">✕</button>
+    <h2>✂️ Move / Copy</h2>
+    <p style="font-size:0.83rem;color:var(--muted);margin-bottom:16px;">Item: <strong id="moveItemName"></strong></p>
+    <div class="form-group"><label>Destination Folder (relative path)</label>
+      <input id="moveDestInput" class="form-input" type="text" placeholder="e.g. docs/reports (blank = root)" /></div>
+    <div style="display:flex;gap:10px;margin-top:16px;">
+      <button class="btn btn-primary" style="flex:1;justify-content:center;" onclick="submitMove('move')">✂️ Move</button>
+      <button class="btn btn-ghost" style="flex:1;justify-content:center;" onclick="submitMove('copy')">📋 Copy</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ SHARE MODAL (file download) ══════════════════════════════════════════ -->
+<div class="modal-backdrop hidden" id="shareModal">
+  <div class="modal-box">
+    <button class="modal-close-btn" onclick="document.getElementById('shareModal').classList.add('hidden')">✕</button>
+    <h2>🔗 Create Share Link</h2>
+    <form action="{{ url_for('share_create') }}" method="post">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+      <input type="hidden" name="rel_path" id="shareRelPath" />
+      <div class="form-group"><label>Link Permissions</label>
+        <select class="form-input" name="permissions" style="margin-bottom:10px;">
+          <option value="read">👁️ Read Only (View & Browse)</option>
+          <option value="read_download">👁️⬇️ Read & Download</option>
+          <option value="download">⬇️ Download Only (Direct download/ZIP)</option>
+          <option value="upload_read_download">🔄 Read, Download & Upload</option>
+          <option value="full">⚡ Full Access (Read, Download, Upload, Edit & Delete)</option>
+        </select></div>
+      <div class="form-group"><label>Shared Username (optional)</label>
+        <input class="form-input" type="text" name="shared_username" placeholder="Leave blank for no username" style="margin-bottom:10px;" /></div>
+      <div class="form-group"><label>Shared Password (optional)</label>
+        <input class="form-input" type="password" name="password" placeholder="Leave blank for no password" style="margin-bottom:10px;" /></div>
+      <div class="form-group"><label>Expiry (hours, blank = never)</label>
+        <input class="form-input" type="number" name="expiry_hours" min="1" placeholder="e.g. 24" /></div>
+      <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;margin-top:12px;">🔗 Generate Link</button>
+    </form>
+  </div>
+</div>
+
+<!-- ══ FOLDER UPLOAD SHARE MODAL ════════════════════════════════════════════ -->
+<div class="modal-backdrop hidden" id="folderShareModal">
+  <div class="modal-box">
+    <button class="modal-close-btn" onclick="document.getElementById('folderShareModal').classList.add('hidden')">✕</button>
+    <h2>📤 Create Folder Upload Link</h2>
+    <p style="font-size:0.83rem;color:var(--muted);margin-bottom:16px;">Anyone with this link can <strong>upload files</strong> directly into <strong id="folderShareName"></strong> — no login needed.</p>
+    <form action="{{ url_for('share_folder_create') }}" method="post">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+      <input type="hidden" name="folder_path" id="folderSharePath" />
+      <div class="form-group"><label>Note / Label (optional)</label>
+        <input class="form-input" type="text" name="note" placeholder="e.g. Drop your documents here" /></div>
+      <div class="form-group"><label>Expiry (hours, blank = never)</label>
+        <input class="form-input" type="number" name="expiry_hours" min="1" placeholder="e.g. 48" /></div>
+      <div class="form-group"><label>Password (optional)</label>
+        <input class="form-input" type="password" name="password" placeholder="Leave blank for no password" /></div>
+      <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;margin-top:8px;">📤 Generate Upload Link</button>
+    </form>
+  </div>
+</div>
+
+<!-- ══ DETAILS DRAWER ═══════════════════════════════════════════════════════ -->
+<div class="details-drawer hidden" id="detailsDrawer">
+  <div class="drawer-header">
+    <h3>ℹ️ <span id="drawerItemName">Item Details</span></h3>
+    <button class="drawer-close" onclick="closeDetails()">✕</button>
+  </div>
+  <div class="drawer-tabs">
+    <button class="drawer-tab active" id="tabDetails" onclick="switchDrawerTab('details')">Details</button>
+    <button class="drawer-tab" id="tabComments" onclick="switchDrawerTab('comments')">Comments</button>
+    <button class="drawer-tab" id="tabSharing" onclick="switchDrawerTab('sharing')">Sharing</button>
+    <button class="drawer-tab" id="tabActivity" onclick="switchDrawerTab('activity')">Activity</button>
+  </div>
+  <div class="drawer-body">
+    <!-- Details Pane -->
+    <div class="drawer-pane active" id="paneDetails">
+      <div class="meta-list">
+        <div class="meta-item"><span class="meta-label">Name</span><span class="meta-value" id="metaName">-</span></div>
+        <div class="meta-item"><span class="meta-label">Path</span><span class="meta-value" id="metaPath">-</span></div>
+        <div class="meta-item"><span class="meta-label">Type</span><span class="meta-value" id="metaType">-</span></div>
+        <div class="meta-item"><span class="meta-label">Size</span><span class="meta-value" id="metaSize">-</span></div>
+        <div class="meta-item"><span class="meta-label">Last Modified</span><span class="meta-value" id="metaMtime">-</span></div>
+      </div>
+    </div>
+    
+    <!-- Comments Pane -->
+    <div class="drawer-pane" id="paneComments">
+      <div class="comments-list" id="drawerCommentsList"></div>
+      <div class="comment-form">
+        <textarea class="form-input comment-textarea" id="commentInput" placeholder="Add a comment..."></textarea>
+        <button class="btn btn-primary btn-sm" onclick="submitComment()">Comment</button>
+      </div>
+    </div>
+    
+    <!-- Sharing Pane -->
+    <div class="drawer-pane" id="paneSharing">
+      <div class="shares-list" id="drawerSharesList"></div>
+      <div class="comment-form" id="sharingFormContainer">
+        <div class="form-group">
+          <label>Share with User</label>
+          <input type="text" class="form-input" id="shareUserInput" placeholder="Enter username..." />
+        </div>
+        <div class="form-group">
+          <label>Permission</label>
+          <select class="form-input" id="sharePermInput">
+            <option value="viewer">Viewer (Read Only)</option>
+            <option value="editor">Editor (Read/Write)</option>
+          </select>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="submitInternalShare()">Share</button>
+      </div>
+    </div>
+    
+    <!-- Activity Pane -->
+    <div class="drawer-pane" id="paneActivity">
+      <div class="drawer-activity" id="drawerActivityList"></div>
+    </div>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/upload_manager.js') }}?v=1.0.6"></script>
+<script src="{{ url_for('static', filename='js/main.js') }}?v=1.0.6"></script>
+<script>
+  // Favorites toggle
+  function toggleStar(path, btn) {
+    const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+    const fd = new FormData();
+    fd.append('path', path);
+    fd.append('csrf_token', csrfToken);
+    fetch('/favorite/toggle', { method: 'POST', body: fd })
+      .then(r => r.json())
+      .then(r => {
+        if (r.status === 'success') {
+          btn.classList.toggle('starred', r.starred);
+          if (activeDetailsPath === path) {
+            document.getElementById('drawerStarBtn')?.classList.toggle('starred', r.starred);
+          }
+        } else {
+          alert('Error: ' + r.msg);
+        }
+      });
+  }
+
+  // Details Drawer functions
+  let activeDetailsPath = '';
+  function openDetails(path) {
+    activeDetailsPath = path;
+    switchDrawerTab('details');
+    fetch('/details/' + encodeURIComponent(path))
+      .then(r => r.json())
+      .then(r => {
+        if (r.status === 'success') {
+          const headerEl = document.getElementById('drawerItemName');
+          headerEl.textContent = (r.is_dir ? '📁 ' : '📄 ') + r.name + ' ';
+          const starBtn = document.createElement('button');
+          starBtn.id = 'drawerStarBtn';
+          starBtn.className = 'star-btn' + (r.starred ? ' starred' : '');
+          starBtn.textContent = '★';
+          starBtn.onclick = function() { toggleStar(r.rel_path, starBtn); };
+          headerEl.appendChild(starBtn);
+          
+          document.getElementById('metaName').textContent = r.name;
+          document.getElementById('metaPath').textContent = r.rel_path || 'Root';
+          document.getElementById('metaType').textContent = r.is_dir ? 'Folder' : (r.name.split('.').pop().toUpperCase() + ' File');
+          document.getElementById('metaSize').textContent = formatBytes(r.size);
+          document.getElementById('metaMtime').textContent = formatTime(r.mtime);
+          
+          renderComments(r.comments);
+          renderShares(r.shares, r.can_edit);
+          if (r.can_edit) {
+            document.getElementById('sharingFormContainer').classList.remove('hidden');
+          } else {
+            document.getElementById('sharingFormContainer').classList.add('hidden');
+          }
+          renderActivity(r.activity);
+          document.getElementById('detailsDrawer').classList.remove('hidden');
+        } else {
+          alert('Error: ' + r.msg);
+        }
+      });
+  }
+  
+  function closeDetails() {
+    document.getElementById('detailsDrawer').classList.add('hidden');
+    activeDetailsPath = '';
+  }
+  
+  function switchDrawerTab(tab) {
+    ['details', 'comments', 'sharing', 'activity'].forEach(t => {
+      document.getElementById('tab' + t.charAt(0).toUpperCase() + t.slice(1)).classList.toggle('active', t === tab);
+      document.getElementById('pane' + t.charAt(0).toUpperCase() + t.slice(1)).classList.toggle('active', t === tab);
+    });
+  }
+  
+  function formatBytes(bytes) {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  }
+  
+  function formatTime(ts) {
+    if (!ts) return '—';
+    const d = new Date(ts * 1000);
+    return d.toLocaleString();
+  }
+  
+  function renderComments(comments) {
+    const list = document.getElementById('drawerCommentsList');
+    list.innerHTML = '';
+    if (!comments.length) {
+      list.innerHTML = '<div style="font-size:0.8rem;color:var(--muted);text-align:center;padding:12px;">No comments yet.</div>';
+      return;
+    }
+    comments.forEach(c => {
+      const el = document.createElement('div');
+      el.className = 'comment-bubble';
+      el.innerHTML = `
+        <div class="comment-meta">
+          <span class="comment-user">${c.user}</span>
+          <span class="comment-time">${c.timestamp.replace('T', ' ')}</span>
+        </div>
+        <div class="comment-text">${escapeHTML(c.text)}</div>
+      `;
+      list.appendChild(el);
+    });
+  }
+  
+  function submitComment() {
+    const input = document.getElementById('commentInput');
+    const text = input.value.trim();
+    if (!text) return;
+    const fd = new FormData();
+    fd.append('text', text);
+    fetch('/comments/' + encodeURIComponent(activeDetailsPath) + '/add', { method: 'POST', body: fd })
+      .then(r => r.json())
+      .then(r => {
+        if (r.status === 'success') {
+          input.value = '';
+          openDetails(activeDetailsPath);
+        } else {
+          alert('Error: ' + r.msg);
+        }
+      });
+  }
+  
+  function renderShares(shares, canEdit) {
+    const list = document.getElementById('drawerSharesList');
+    list.innerHTML = '';
+    if (!shares.length) {
+      list.innerHTML = '<div style="font-size:0.8rem;color:var(--muted);text-align:center;padding:12px;">Not shared with any users.</div>';
+      return;
+    }
+    shares.forEach(s => {
+      const el = document.createElement('div');
+      el.className = 'share-item';
+      el.innerHTML = `
+        <div class="share-item-info">
+          <span class="share-item-user">${s.user}</span>
+          <span class="share-item-perm">${s.permission}</span>
+        </div>
+        ${canEdit ? `<button class="revoke-share-btn" onclick="revokeInternalShare('${s.user}')">Revoke</button>` : ''}
+      `;
+      list.appendChild(el);
+    });
+  }
+  
+  function submitInternalShare() {
+    const userIn = document.getElementById('shareUserInput');
+    const permIn = document.getElementById('sharePermInput');
+    const user = userIn.value.trim();
+    const perm = permIn.value;
+    if (!user) return;
+    const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+    const fd = new FormData();
+    fd.append('path', activeDetailsPath);
+    fd.append('user', user);
+    fd.append('permission', perm);
+    fd.append('csrf_token', csrfToken);
+    fetch('/share/internal/add', { method: 'POST', body: fd })
+      .then(r => r.json())
+      .then(r => {
+        if (r.status === 'success') {
+          userIn.value = '';
+          openDetails(activeDetailsPath);
+        } else {
+          alert('Error: ' + r.msg);
+        }
+      });
+  }
+  
+  function revokeInternalShare(targetUser) {
+    if (!confirm('Revoke access for ' + targetUser + '?')) return;
+    const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+    const fd = new FormData();
+    fd.append('path', activeDetailsPath);
+    fd.append('user', targetUser);
+    fd.append('csrf_token', csrfToken);
+    fetch('/share/internal/remove', { method: 'POST', body: fd })
+      .then(r => r.json())
+      .then(r => {
+        if (r.status === 'success') {
+          openDetails(activeDetailsPath);
+        } else {
+          alert('Error: ' + r.msg);
+        }
+      });
+  }
+  
+  function renderActivity(activity) {
+    const list = document.getElementById('drawerActivityList');
+    list.innerHTML = '';
+    if (!activity.length) {
+      list.innerHTML = '<div style="font-size:0.8rem;color:var(--muted);text-align:center;padding:12px;">No activity logged.</div>';
+      return;
+    }
+    activity.forEach(a => {
+      const el = document.createElement('div');
+      el.className = 'activity-item';
+      el.innerHTML = `
+        <strong>${a.user}</strong> ${a.action} ${a.extra ? `(${a.extra})` : ''}
+        <span class="activity-time">${a.ts.replace('T', ' ')}</span>
+      `;
+      list.appendChild(el);
+    });
+  }
+  
+  function escapeHTML(str) {
+    return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+  }
+
+  // Original consolidated scripts
+  document.getElementById('newFolderBtn').onclick  = () => { document.getElementById('folderModal').classList.remove('hidden'); document.getElementById('folderNameInput').focus(); };
+  document.getElementById('newFolderBtn2').onclick = () => { document.getElementById('folderModal').classList.remove('hidden'); document.getElementById('folderNameInput').focus(); };
+
+  function switchTab(tab) {
+    document.getElementById('panelFile').style.display   = tab==='file'   ? '' : 'none';
+    document.getElementById('panelFolder').style.display = tab==='folder' ? '' : 'none';
+    document.getElementById('tabFile').classList.toggle('active',   tab==='file');
+    document.getElementById('tabFolder').classList.toggle('active', tab==='folder');
+    document.getElementById('progressWrap').classList.add('hidden');
+    document.getElementById('uploadStatus').classList.add('hidden');
+    document.getElementById('folderProgressList').classList.add('hidden');
+    document.getElementById('folderProgressList').innerHTML = '';
+  }
+
+  document.getElementById('folderInput').addEventListener('change', function() {
+    if (this.files.length) {
+      const top = this.files[0].webkitRelativePath.split('/')[0];
+      document.getElementById('folderDropLabel').innerHTML = '<strong>📁 '+top+'</strong> — '+this.files.length+' files selected';
+      submitFolderUpload();
+    }
+  });
+
+  function submitFolderUpload() {
+    const input = document.getElementById('folderInput');
+    const files = Array.from(input.files);
+    if (!files.length) { alert('Please select a folder first.'); return; }
+    
+    const destFolder = document.querySelector('#folderUploadForm input[name="dest_folder"]').value;
+    
+    fetch('/api/upload_rules?folder=' + encodeURIComponent(destFolder))
+      .then(res => res.json())
+      .then(rules => {
+        let totalSize = 0;
+        let blockedFiles = [];
+        
+        const maxFileSize = rules.max_file_size_mb ? parseFloat(rules.max_file_size_mb) * 1024 * 1024 : null;
+        const maxFolderSize = rules.max_folder_size_mb ? parseFloat(rules.max_folder_size_mb) * 1024 * 1024 : null;
+        const blockedExts = (rules.blocked_extensions || []).map(e => e.trim().toLowerCase());
+        
+        let validFiles = [];
+        for (let f of files) {
+          let isBlocked = false;
+          if (f.name.includes('.')) {
+            const ext = f.name.split('.').pop().toLowerCase();
+            if (blockedExts.includes(ext)) {
+              blockedFiles.push(f.name + ' (Blocked format)');
+              isBlocked = true;
+            }
+          }
+          
+          if (maxFileSize && f.size > maxFileSize) {
+            blockedFiles.push(f.name + ' (your file size is larger then the admin allow please contact the administrator..)');
+            isBlocked = true;
+          }
+          
+          if (!isBlocked) {
+            validFiles.push(f);
+            totalSize += f.size;
+          }
+        }
+        
+        if (maxFolderSize && totalSize > maxFolderSize) {
+          alert('your file size is larger then the admin allow please contact the administrator..');
+          return;
+        }
+        
+        if (blockedFiles.length > 0) {
+          alert('The following file(s) violate upload restrictions and will be skipped:\n\n' + blockedFiles.slice(0, 5).join('\n') + (blockedFiles.length > 5 ? '\n...and ' + (blockedFiles.length - 5) + ' more' : ''));
+        }
+        
+        if (validFiles.length === 0) {
+          return; // Nothing to upload
+        }
+
+        const queue = new FileVaultUploadQueue({
+          uploadUrl: '{{ url_for("upload") }}',
+          destFolder: destFolder,
+          onComplete: () => window.location.reload()
+        });
+        queue.addFiles(validFiles);
+      })
+      .catch(err => {
+        console.error('Error validating upload rules:', err);
+        alert('Could not validate upload rules. Please try again.');
+      });
+  }
+
+  let _renamePath='';
+  function openRenameModal(path, name, type) {
+    _renamePath = path;
+    document.getElementById('renameInput').value = name;
+    document.getElementById('renameModal').classList.remove('hidden');
+    document.getElementById('renameInput').focus();
+  }
+  function submitRename() {
+    const newName = document.getElementById('renameInput').value.trim();
+    if (!newName) return;
+    const fd = new FormData();
+    fd.append('old_path', _renamePath); fd.append('new_name', newName);
+    fetch('{{ url_for("rename") }}', { method:'POST', headers:{'X-Requested-With':'XMLHttpRequest'}, body:fd })
+      .then(r=>r.json()).then(r => {
+        if (r.status==='success') window.location.reload();
+        else alert('Error: '+r.msg);
+      });
+  }
+  document.getElementById('renameInput').addEventListener('keydown', e => { if(e.key==='Enter') submitRename(); });
+
+  let _moveSrcPath='';
+  function openMoveModal(path, name) {
+    _moveSrcPath = path;
+    document.getElementById('moveItemName').textContent = name;
+    document.getElementById('moveDestInput').value = '';
+    document.getElementById('moveModal').classList.remove('hidden');
+  }
+  function submitMove(action) {
+    const dest = document.getElementById('moveDestInput').value.trim();
+    const form = document.createElement('form');
+    form.method='POST'; form.action='/'+action;
+    const addField = (n,v) => { const i=document.createElement('input'); i.type='hidden'; i.name=n; i.value=v; form.appendChild(i); };
+    addField('csrf_token', document.querySelector('meta[name="csrf-token"]').getAttribute('content'));
+    addField('src_path', _moveSrcPath); addField('dest_folder', dest);
+    document.body.appendChild(form); form.submit();
+  }
+
+  function openShareModal(relPath) {
+    document.getElementById('shareRelPath').value = relPath;
+    document.getElementById('shareModal').classList.remove('hidden');
+  }
+  function openFolderShareModal(folderPath, folderName) {
+    document.getElementById('folderSharePath').value = folderPath;
+    document.getElementById('folderShareName').textContent = folderName;
+    document.getElementById('folderShareModal').classList.remove('hidden');
+  }
+
+  function openPreview(url, name) {
+    document.getElementById('previewTitle').textContent = name;
+    document.getElementById('previewDownload').href = url.replace('/preview/','/download/');
+    const body = document.getElementById('previewBody');
+    const ext  = name.split('.').pop().toLowerCase();
+    if (['png','jpg','jpeg','gif','svg','webp','bmp'].includes(ext))
+      body.innerHTML = '<img src="'+url+'" style="max-width:100%;max-height:70vh;border-radius:8px;" />';
+    else if (['mp4','webm','mov'].includes(ext))
+      body.innerHTML = '<video controls style="max-width:100%;max-height:70vh;"><source src="'+url+'"></video>';
+    else if (['mp3','wav','ogg','flac'].includes(ext))
+      body.innerHTML = '<audio controls style="width:100%;"><source src="'+url+'"></audio>';
+    else if (ext === 'pdf')
+      body.innerHTML = '<iframe src="'+url+'" style="width:100%;height:70vh;border:none;border-radius:8px;"></iframe>';
+    else
+      fetch(url).then(r=>r.text()).then(t=>{body.innerHTML='<pre class="preview-text">'+t.replace(/</g,'&lt;')+'</pre>';});
+    document.getElementById('previewModal').classList.remove('hidden');
+  }
+  function closePreview() {
+    document.getElementById('previewModal').classList.add('hidden');
+    document.getElementById('previewBody').innerHTML = '';
+  }
+  document.addEventListener('keydown', e => { if(e.key==='Escape') { closePreview(); ['folderModal','renameModal','moveModal','shareModal','folderShareModal','detailsDrawer'].forEach(id=>document.getElementById(id).classList.add('hidden')); } });
+
+
+
+  let sortKey='name', sortDir=1;
+  document.querySelectorAll('.sort-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (sortKey===btn.dataset.sort) sortDir*=-1;
+      else { sortKey=btn.dataset.sort; sortDir=1; }
+      document.querySelectorAll('.sort-btn').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('sortDirBtn').textContent = sortDir===1?'↑':'↓';
+      sortTable();
+    });
+  });
+  function toggleSortDir() { sortDir*=-1; document.getElementById('sortDirBtn').textContent=sortDir===1?'↑':'↓'; sortTable(); }
+  function sortTable() {
+    ['fileTableBody','fileGrid'].forEach(id=>{
+      const container=document.getElementById(id); if(!container) return;
+      const rows=Array.from(container.querySelectorAll('.file-row,.folder-row'));
+      rows.sort((a,b)=>{
+        let av=a.dataset[sortKey]||'', bv=b.dataset[sortKey]||'';
+        if(sortKey==='size'||sortKey==='date'){av=parseFloat(av)||0;bv=parseFloat(bv)||0;return(av-bv)*sortDir;}
+        return av.localeCompare(bv)*sortDir;
+      });
+      rows.forEach(r=>container.appendChild(r));
+    });
+  }
+
+  let isGridView = false;
+  function toggleView() {
+    isGridView = !isGridView;
+    document.getElementById('listView').style.display = isGridView?'none':'';
+    document.getElementById('gridView').style.display = isGridView?'':'none';
+    document.getElementById('viewToggleBtn').textContent = isGridView?'☰':'⊞';
+  }
+
+  document.getElementById('searchInput').addEventListener('input', function(){
+    const q = this.value.toLowerCase();
+    document.querySelectorAll('.file-row,.folder-row').forEach(row=>{
+      row.style.display = (row.dataset.name||'').toLowerCase().includes(q)?'':'none';
+    });
+  });
+
+  document.querySelectorAll('.delete-form').forEach(form=>{
+    form.addEventListener('submit',e=>{ if(!confirm('Move "'+form.dataset.name+'" to Trash?')) e.preventDefault(); });
+  });
+</script>
+{% endblock %}

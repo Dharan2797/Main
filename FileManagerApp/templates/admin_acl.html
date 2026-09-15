@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% block title %}Folder Access Control – FileVault Admin{% endblock %}
+{% block body %}
+<div class="app-layout">
+  <aside class="sidebar">
+    <div class="sidebar-logo"><div class="logo-icon">🗄️</div><span class="logo-text">File<span>Vault</span></span></div>
+    <nav class="sidebar-nav">
+      <a href="{{ url_for('index') }}" class="nav-item"><span class="nav-icon">🏠</span><span class="nav-label">Home</span></a>
+      <a href="{{ url_for('favorites_page') }}" class="nav-item"><span class="nav-icon">⭐</span><span class="nav-label">Favorites</span></a>
+      <a href="{{ url_for('shared_with_me_page') }}" class="nav-item"><span class="nav-icon">👥</span><span class="nav-label">Shared with me</span></a>
+      <a href="{{ url_for('shares_page') }}" class="nav-item"><span class="nav-icon">🔗</span><span class="nav-label">Share Links</span></a>
+      <a href="{{ url_for('activity') }}" class="nav-item"><span class="nav-icon">📋</span><span class="nav-label">Activity Log</span></a>
+      <a href="{{ url_for('trash') }}" class="nav-item"><span class="nav-icon">🗑</span><span class="nav-label">Recycle Bin</span></a>
+      <a href="{{ url_for('quotas_page') }}" class="nav-item"><span class="nav-icon">⚙️</span><span class="nav-label">Storage Quotas</span></a>
+      <a href="{{ url_for('admin_users') }}" class="nav-item"><span class="nav-icon">👥</span><span class="nav-label">Users</span></a>
+      <a href="{{ url_for('admin_acl') }}" class="nav-item active"><span class="nav-icon">🔐</span><span class="nav-label">Folder Access</span></a>
+      <a href="{{ url_for('admin_rules') }}" class="nav-item"><span class="nav-icon">🛡️</span><span class="nav-label">Upload Rules</span></a>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="user-badge">
+        <div class="user-avatar">{{ current_user.id[0].upper() }}</div>
+        <div class="user-info"><div class="name">{{ current_user.id }}</div><div class="role">{{ current_user.role|capitalize }}</div></div>
+        <a href="{{ url_for('logout') }}" class="logout-btn">⏏</a>
+      </div>
+    </div>
+  </aside>
+
+  <div class="main-content">
+    <header class="topbar"><h1>🔐 Folder Access Control</h1></header>
+    <div class="page-body">
+      {% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}
+        <ul class="flash-list">{% for cat,msg in messages %}<li class="flash-msg {{ cat }}">{% if cat=='success' %}✅{% else %}❌{% endif %} {{ msg }}</li>{% endfor %}</ul>
+      {% endif %}{% endwith %}
+
+      <div class="quota-info-banner">
+        <span class="banner-icon">🔐</span>
+        <div>Restrict access to specific folders by user or role. <strong>Admins always have full access.</strong>
+        Folders with no ACL are accessible to all logged-in users.</div>
+      </div>
+
+      <!-- Set ACL form -->
+      <div class="file-manager-card" style="margin-bottom:22px;">
+        <div class="card-header" style="padding:16px 20px 0;"><span class="card-title">➕ Set Folder Permission</span></div>
+        <form action="{{ url_for('admin_acl_set') }}" method="post" style="padding:18px 20px;display:flex;flex-direction:column;gap:14px;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+          <div style="display:flex;gap:12px;flex-wrap:wrap;">
+            <div class="form-group" style="margin:0;flex:1;min-width:200px;">
+              <label style="font-size:0.78rem;color:var(--muted);display:block;margin-bottom:5px;">Folder</label>
+              <select class="form-input" name="folder_key" style="padding:8px 10px;">
+                {% for f in all_folders %}
+                <option value="{{ f }}">{{ '/ Root' if f == 'root' else '📁 ' + f }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="form-group" style="margin:0;flex:1;min-width:200px;">
+              <label style="font-size:0.78rem;color:var(--muted);display:block;margin-bottom:5px;">Allowed Roles</label>
+              <div style="display:flex;gap:10px;padding-top:6px;">
+                <label style="display:flex;align-items:center;gap:5px;font-size:0.85rem;cursor:pointer;">
+                  <input type="checkbox" name="allowed_roles" value="admin" checked disabled /> Admin</label>
+                <label style="display:flex;align-items:center;gap:5px;font-size:0.85rem;cursor:pointer;">
+                  <input type="checkbox" name="allowed_roles" value="editor" id="ckEditor" /> Editor</label>
+                <label style="display:flex;align-items:center;gap:5px;font-size:0.85rem;cursor:pointer;">
+                  <input type="checkbox" name="allowed_roles" value="viewer" id="ckViewer" /> Viewer</label>
+              </div>
+            </div>
+          </div>
+          <div class="form-group" style="margin:0;">
+            <label style="font-size:0.78rem;color:var(--muted);display:block;margin-bottom:5px;">
+              Specific Users (comma-separated usernames, optional)
+            </label>
+            <input class="form-input" type="text" name="allowed_users"
+                   placeholder="e.g. alice, bob — leave blank to use role-only access"
+                   style="max-width:500px;" />
+          </div>
+          <div>
+            <button type="submit" class="btn btn-primary btn-sm">💾 Save Permission</button>
+            <span style="font-size:0.78rem;color:var(--muted);margin-left:10px;">Leave both roles unchecked and users blank to remove restriction entirely.</span>
+          </div>
+        </form>
+      </div>
+
+      <!-- ACL table -->
+      {% if acl %}
+      <div class="file-manager-card">
+        <div class="card-header" style="padding:16px 20px 0;"><span class="card-title">🔐 Current Restrictions</span></div>
+        <table class="file-table">
+          <thead><tr><th>Folder</th><th>Allowed Roles</th><th>Allowed Users</th><th>Last Updated</th><th>Actions</th></tr></thead>
+          <tbody>
+          {% for key, entry in acl.items() %}
+          <tr>
+            <td><span class="type-badge folder-badge">{{ '/ Root' if key == 'root' else key }}</span></td>
+            <td>
+              {% for r in entry.get('allowed_roles', []) %}
+              <span class="qbadge {% if r=='admin' %}qbadge-set{% elif r=='editor' %}{% else %}qbadge-unlimited{% endif %}"
+                    style="{% if r=='editor' %}background:rgba(63,185,80,.15);color:#3fb950;border-color:rgba(63,185,80,.3);{% endif %}margin-right:4px;">
+                {{ r|capitalize }}
+              </span>
+              {% else %}—{% endfor %}
+            </td>
+            <td style="font-size:0.82rem;">
+              {% if entry.get('allowed_users') %}
+                {{ entry.allowed_users | join(', ') }}
+              {% else %}—{% endif %}
+            </td>
+            <td class="date-cell" style="font-size:0.78rem;">{{ entry.get('updated_at', '—')[:16] }}</td>
+            <td>
+              <form class="inline-form" action="{{ url_for('admin_acl_remove') }}" method="post"
+                    onsubmit="return confirm('Remove restriction for {{ key }}?')">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+                <input type="hidden" name="folder_key" value="{{ key }}" />
+                <button class="btn btn-danger btn-sm">🚫 Remove</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="empty-state"><span class="empty-icon">🔓</span><p>No folder restrictions set. All folders are accessible to any logged-in user.</p></div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}
